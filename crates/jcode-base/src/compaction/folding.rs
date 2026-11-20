@@ -59,7 +59,12 @@ impl CompactionManager {
         if self.mode != crate::config::CompactionMode::ModelDriven { return Err("Enable model_driven compaction first".into()); }
         let start = folding::parse_ref(start)?;
         let end = folding::parse_ref(end)?;
-        if start < self.compacted_count { return Err("Range is already behind the fallback compaction boundary".into()); }
+        if start < self.compacted_count {
+            return Err(format!(
+                "Range starts behind the summary boundary. Start at {} or later.",
+                folding::message_ref(self.compacted_count)
+            ));
+        }
         let id = folding::compress(&mut self.folding.folds, &self.folding.history, start, end, self.compacted_count, summary)?;
         self.fold_changed("model_driven");
         Ok(id)
@@ -93,6 +98,7 @@ impl CompactionManager {
 
     pub fn context_fold_status(&self) -> serde_json::Value {
         serde_json::json!({"mode":self.mode.as_str(), "message_count":self.folding.history.len(),
+            "first_ref":folding::message_ref(self.compacted_count),
             "context_budget":self.token_budget, "estimated_tokens":self.token_estimate_with(&self.folding.history),
             "folds":self.folding.folds.iter().map(|f| serde_json::json!({"id":f.id,"start":folding::message_ref(f.start),"end":folding::message_ref(f.end),"active":f.active})).collect::<Vec<_>>()})
     }
