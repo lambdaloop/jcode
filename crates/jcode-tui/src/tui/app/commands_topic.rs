@@ -44,11 +44,7 @@ pub(in crate::tui::app) fn handle_topic_command(app: &mut App, input: &str) -> b
         .unwrap_or_else(std::env::current_dir);
     let result = (|| -> Result<(), String> {
         let cwd = cwd.map_err(|err| format!("Could not determine the topic folder: {err}"))?;
-        if !cwd.join(".pi/hub.json").is_file() {
-            return Err(
-                "Open jcode in a Polianka topic folder containing .pi/hub.json first.".to_owned(),
-            );
-        }
+        // The launcher creates .pi/hub.json from the paired hub when missing.
         let slug = topic_slug(words.next().unwrap_or_default().trim(), &cwd).ok_or_else(|| {
             "Usage: /topic [slug]. Use 1 to 40 lowercase letters, digits, or dashes, starting with a letter or digit.".to_owned()
         })?;
