@@ -20,3 +20,6 @@ captures/
 /*.avif
 /*.mp4
 /*.png
+
+# Local notes and reports (not committed).
+/dev/
