@@ -49,7 +49,10 @@ fn folds_roundtrip_with_inactive_state_and_originals() {
     let loaded: Session = serde_json::from_slice(&json).unwrap();
     assert_eq!(loaded.compaction, session.compaction);
     assert_eq!(loaded.messages.len(), 3);
-    assert_eq!(loaded.messages[0].content, session.messages[0].content);
+    assert_eq!(
+        serde_json::to_value(&loaded.messages[0].content).unwrap(),
+        serde_json::to_value(&session.messages[0].content).unwrap(),
+    );
 }
 
 #[test]
