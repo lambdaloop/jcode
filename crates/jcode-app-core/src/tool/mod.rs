@@ -15,6 +15,8 @@ mod communicate;
 #[cfg(target_os = "macos")]
 mod computer;
 mod config_edit_notice;
+mod context_folding;
+mod registry_session_tools;
 mod conversation_search;
 mod debug_socket;
 mod desktop_selfdev;
@@ -612,35 +614,7 @@ impl Registry {
 
         // Per-session tools that need provider/registry references
         let session_tools_start = std::time::Instant::now();
-        Self::insert_tool(
-            &mut tools_map,
-            "batch",
-            batch::BatchTool::new(registry.downgrade()),
-        );
-        Self::insert_tool(
-            &mut tools_map,
-            "conversation_search",
-            conversation_search::ConversationSearchTool::new(compaction),
-        );
-        // Codemode is opt-in (`[tools] codemode = true`). When off, the tool
-        // is never registered, so it costs nothing and never reaches a model.
-        if codemode::enabled() {
-            Self::insert_tool(
-                &mut tools_map,
-                "codemode",
-                codemode::CodemodeTool::new(registry.downgrade()),
-            );
-        }
-        // Integration discovery is opt-in via `[sponsors] enabled = true`; when disabled the
-        // tool is never registered and no discovery endpoint is ever
-        // contacted.
-        if crate::config::config().sponsors.enabled {
-            Self::insert_tool(
-                &mut tools_map,
-                "integration_tools",
-                discover::DiscoverToolsTool::new(),
-            );
-        }
+        registry.insert_session_tools(&mut tools_map);
         let session_tools_ms = session_tools_start.elapsed().as_millis();
 
         let write_start = std::time::Instant::now();
