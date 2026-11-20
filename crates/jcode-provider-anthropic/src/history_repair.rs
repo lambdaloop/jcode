@@ -5,6 +5,23 @@
 
 use super::*;
 
+/// True when an assistant message ends on an unanswered raw server tool *call*,
+/// i.e. the shape of a provider-native turn paused with `pause_turn`. Anthropic
+/// resumes such a turn when it is resent as-is.
+///
+/// Ending on the server tool *result* is not a paused turn: the tool already
+/// ran and the turn was cut off before its answer. Resending that as an
+/// assistant tail is only an assistant prefill, which models without prefill
+/// support reject with `400 ... does not support assistant message prefill`.
+pub(crate) fn is_paused_server_tool_turn(message: &ApiMessage) -> bool {
+    match message.content.last() {
+        Some(ApiContentBlock::Raw(item)) => {
+            item.get("type").and_then(Value::as_str) == Some("server_tool_use")
+        }
+        _ => false,
+    }
+}
+
 #[cfg(test)]
 #[path = "repair_efficiency_tests.rs"]
 mod repair_efficiency_tests;

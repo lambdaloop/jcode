@@ -69,6 +69,32 @@ fn unmatched_server_tool_result_is_removed() {
     assert_eq!(formatted[0].role, "user");
 }
 
+/// A turn cut off after its search *result* landed is not resumable, so the
+/// conversation must not be resent ending on that assistant message. Doing so
+/// produced `400 ... does not support assistant message prefill`.
+#[test]
+fn trailing_server_tool_result_is_not_a_paused_turn() {
+    let call = ApiMessage {
+        role: "assistant".to_string(),
+        content: vec![ApiContentBlock::Raw(json!({
+            "type": "server_tool_use",
+            "id": "srvtoolu_1",
+            "name": "web_search"
+        }))],
+    };
+    assert!(is_paused_server_tool_turn(&call));
+
+    let result = ApiMessage {
+        role: "assistant".to_string(),
+        content: vec![ApiContentBlock::Raw(json!({
+            "type": "web_search_tool_result",
+            "tool_use_id": "srvtoolu_1",
+            "content": []
+        }))],
+    };
+    assert!(!is_paused_server_tool_turn(&result));
+}
+
 #[test]
 fn final_unmatched_server_tool_use_is_preserved_for_pause_turn_resume() {
     let messages = vec![assistant_with_native(json!({
