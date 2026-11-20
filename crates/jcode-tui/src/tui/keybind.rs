@@ -199,8 +199,8 @@ pub fn load_scroll_keys() -> ScrollKeys {
         default_prompt_down,
         "Ctrl+J",
     );
-    let (bookmark, _) =
-        parse_or_default(&cfg.keybindings.scroll_bookmark, default_bookmark, "Ctrl+G");
+    let bookmark = parse_keybinding(&cfg.keybindings.scroll_bookmark)
+        .filter(|binding| !binding.matches(default_bookmark.code, default_bookmark.modifiers));
 
     ScrollKeys {
         up,

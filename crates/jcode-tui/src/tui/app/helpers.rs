@@ -300,6 +300,23 @@ pub(super) fn ctrl_bracket_fallback_to_esc(code: &mut KeyCode, modifiers: &mut K
 #[cfg(not(target_os = "macos"))]
 pub(super) fn ctrl_bracket_fallback_to_esc(_code: &mut KeyCode, _modifiers: &mut KeyModifiers) {}
 
+/// Ctrl+G is an Esc alias (pi/emacs `keyboard-quit` habit): it interrupts a
+/// running turn, clears the composer, and closes pickers. The `/agents`
+/// picker keeps Ctrl+G for its session/global scope toggle.
+pub(super) fn ctrl_g_to_esc(
+    code: &mut KeyCode,
+    modifiers: &mut KeyModifiers,
+    agents_picker_open: bool,
+) {
+    if agents_picker_open || *modifiers != KeyModifiers::CONTROL {
+        return;
+    }
+    if matches!(*code, KeyCode::Char('g' | 'G')) {
+        *code = KeyCode::Esc;
+        *modifiers = KeyModifiers::NONE;
+    }
+}
+
 /// Debug command file path
 pub(super) fn debug_cmd_path() -> PathBuf {
     if let Ok(path) = std::env::var("JCODE_DEBUG_CMD_PATH") {

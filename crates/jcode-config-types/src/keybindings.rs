@@ -284,9 +284,9 @@ pub const KEYBINDING_DEFAULTS: &[KeybindingDefault] = &[
     },
     KeybindingDefault {
         id: "scroll_bookmark",
-        description: "Toggle the scroll bookmark",
-        macos: PlatformDefault::dev("ctrl+g"),
-        other: PlatformDefault::dev("ctrl+g"),
+        description: "Toggle the scroll bookmark (unbound by default; Ctrl+G interrupts like Esc)",
+        macos: PlatformDefault::dev(""),
+        other: PlatformDefault::dev(""),
     },
     KeybindingDefault {
         id: "auto_poke_toggle",

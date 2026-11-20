@@ -2,7 +2,8 @@
 
 use super::{
     App, DisplayMessage, MAX_TURN_HOLD_SECS, PendingReloadReconnectStatus, ProcessingStatus,
-    RemoteResumeActivity, SendAction, auth::auth_muse_helpers, ctrl_bracket_fallback_to_esc, input,
+    RemoteResumeActivity, SendAction, auth::auth_muse_helpers, ctrl_bracket_fallback_to_esc,
+    ctrl_g_to_esc, input,
     parse_rate_limit_error, remote_notifications::present_swarm_notification,
     spawn_in_new_terminal,
 };
@@ -1940,6 +1941,7 @@ fn handle_disconnected_key_internal(
     let mut code = code;
     let mut modifiers = modifiers;
     ctrl_bracket_fallback_to_esc(&mut code, &mut modifiers);
+    ctrl_g_to_esc(&mut code, &mut modifiers, app.agents_picker_owns_ctrl_g());
 
     if app.handle_ssh_login_key(code, modifiers, text_input.as_deref()) {
         return Ok(());

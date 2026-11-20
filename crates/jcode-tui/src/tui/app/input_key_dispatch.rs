@@ -12,6 +12,7 @@ impl App {
         let mut code = code;
         let mut modifiers = modifiers;
         ctrl_bracket_fallback_to_esc(&mut code, &mut modifiers);
+        ctrl_g_to_esc(&mut code, &mut modifiers, self.agents_picker_owns_ctrl_g());
 
         if self.handle_ssh_login_key(code, modifiers, text_input.as_deref()) {
             return Ok(());

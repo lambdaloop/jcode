@@ -359,6 +359,16 @@ pub(crate) fn agent_models_picker_view(
     })
 }
 
+impl App {
+    /// True while an `/agents` picker owns Ctrl+G (scope toggle).
+    pub(super) fn agents_picker_owns_ctrl_g(&self) -> bool {
+        self.inline_interactive_state
+            .as_ref()
+            .and_then(agent_models_picker_view)
+            .is_some()
+    }
+}
+
 fn key_char_eq_ignore_ascii_case(code: KeyCode, expected: char) -> bool {
     matches!(code, KeyCode::Char(c) if c.eq_ignore_ascii_case(&expected))
 }

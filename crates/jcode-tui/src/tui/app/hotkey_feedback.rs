@@ -4,7 +4,7 @@
 //!
 //! 1. **Rare-hotkey feedback.** When the user presses a chord jcode recognizes
 //!    but they use rarely (or have not used in a long time), we surface a short
-//!    inline note: `⌨ Ctrl+G → toggle scroll bookmark`. Per-action usage counts
+//!    inline note: `⌨ Ctrl+P → toggle auto-poke`. Per-action usage counts
 //!    persist across sessions, so the notes stop once an action is familiar.
 //! 2. **Near-miss suggestions.** When a modified chord falls through every
 //!    dispatcher unhandled, we tell the user instead of silently swallowing it:
@@ -330,7 +330,7 @@ pub(super) fn build_registry(inputs: &RegistryInputs<'_>) -> Vec<KnownHotkey> {
         "jump to the next prompt",
     );
     push(
-        Some(inputs.scroll.bookmark.clone()),
+        inputs.scroll.bookmark.clone(),
         "scroll_bookmark",
         "toggle the scroll bookmark",
     );
@@ -917,7 +917,7 @@ mod tests {
             page_down: alt('d'),
             prompt_up: ctrl('k'),
             prompt_down: ctrl('j'),
-            bookmark: ctrl('g'),
+            bookmark: Some(ctrl('g')),
         };
         let centered = CenteredToggleKeys {
             toggle: Some(alt('c')),

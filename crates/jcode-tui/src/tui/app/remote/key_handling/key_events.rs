@@ -26,6 +26,7 @@ pub(super) async fn handle_remote_key_internal(
     let mut code = code;
     let mut modifiers = modifiers;
     ctrl_bracket_fallback_to_esc(&mut code, &mut modifiers);
+    ctrl_g_to_esc(&mut code, &mut modifiers, app.agents_picker_owns_ctrl_g());
 
     if app.handle_key_during_provider_failover(code) {
         return Ok(());

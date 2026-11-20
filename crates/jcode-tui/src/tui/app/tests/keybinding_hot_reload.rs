@@ -14,14 +14,14 @@ fn keybinding_edit_applies_to_the_next_key_press() {
     let config_path = crate::config::Config::path().expect("config path");
     std::fs::create_dir_all(config_path.parent().expect("config parent"))
         .expect("create config parent");
-    std::fs::write(&config_path, "[keybindings]\nscroll_bookmark = \"ctrl+g\"\n")
+    std::fs::write(&config_path, "[keybindings]\nscroll_bookmark = \"alt+p\"\n")
         .expect("write initial config");
 
     let mut app = create_test_app();
     assert!(
         app.scroll_keys
-            .is_bookmark(KeyCode::Char('g'), KeyModifiers::CONTROL),
-        "initial config should bind the bookmark key to Ctrl+G"
+            .is_bookmark(KeyCode::Char('p'), KeyModifiers::ALT),
+        "initial config should bind the bookmark key to Alt+P"
     );
 
     // Rebind on disk. Length differs as well as mtime so the config
@@ -47,8 +47,8 @@ fn keybinding_edit_applies_to_the_next_key_press() {
     );
     assert!(
         !app.scroll_keys
-            .is_bookmark(KeyCode::Char('g'), KeyModifiers::CONTROL),
-        "the old Ctrl+G bookmark binding should no longer match"
+            .is_bookmark(KeyCode::Char('p'), KeyModifiers::ALT),
+        "the old Alt+P bookmark binding should no longer match"
     );
 
     if let Some(prev_home) = prev_home {

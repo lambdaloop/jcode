@@ -332,7 +332,8 @@ pub struct ScrollKeys {
     pub page_down: KeyBinding,
     pub prompt_up: KeyBinding,
     pub prompt_down: KeyBinding,
-    pub bookmark: KeyBinding,
+    /// Unbound by default; Ctrl+G is the Esc/interrupt alias.
+    pub bookmark: Option<KeyBinding>,
 }
 
 impl ScrollKeys {
@@ -432,7 +433,9 @@ impl ScrollKeys {
 
     /// Check if a key matches the scroll bookmark toggle
     pub fn is_bookmark(&self, code: KeyCode, modifiers: KeyModifiers) -> bool {
-        self.bookmark.matches(code, modifiers)
+        self.bookmark
+            .as_ref()
+            .is_some_and(|binding| binding.matches(code, modifiers))
     }
 }
 
@@ -694,10 +697,7 @@ mod tests {
                 code: KeyCode::Char(']'),
                 modifiers: KeyModifiers::ALT,
             },
-            bookmark: KeyBinding {
-                code: KeyCode::Char('g'),
-                modifiers: KeyModifiers::CONTROL,
-            },
+            bookmark: None,
         }
     }
 

@@ -63,8 +63,9 @@ centered_toggle = "alt+c"
 scroll_prompt_up = "ctrl+["
 scroll_prompt_down = "ctrl+]"
 
-# Scroll bookmark toggle (stash position, jump to bottom, press again to return)
-scroll_bookmark = "ctrl+g"
+# Scroll bookmark toggle (stash position, jump to bottom, press again to return).
+# Unbound by default: Ctrl+G is an Esc alias (interrupt / clear / close).
+scroll_bookmark = ""
 
 # Auto-poke toggle. Set "" to disable.
 auto_poke_toggle = "ctrl+p"
