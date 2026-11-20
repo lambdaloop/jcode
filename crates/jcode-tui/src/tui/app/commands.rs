@@ -4,6 +4,9 @@ pub(super) use release_prompts::*;
 #[path = "commands_manual_subagent.rs"]
 mod manual_subagent;
 use manual_subagent::launch_manual_subagent;
+#[path = "commands_topic.rs"]
+mod topic;
+pub(super) use topic::handle_topic_command;
 
 pub(super) use super::commands_improve::{
     build_improve_prompt, build_improve_resume_prompt, build_refactor_prompt,

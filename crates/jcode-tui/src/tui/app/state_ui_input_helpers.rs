@@ -206,6 +206,7 @@ const REGISTERED_COMMANDS: &[RegisteredCommand] = &[
         "Self-dev: run the real updater against a fake local release in a sandbox (Alt+Shift+U)",
     ),
     RegisteredCommand::public("/resume", "Open session picker"),
+    RegisteredCommand::public("/topic", "Open a Polianka topic manager: /topic [slug]"),
     RegisteredCommand::public("/sessions", "Alias for /resume"),
     RegisteredCommand::public("/session", "Alias for /resume"),
     RegisteredCommand::public("/active", "Manage live sessions (working vs ready)"),

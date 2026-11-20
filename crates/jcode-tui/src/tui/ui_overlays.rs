@@ -414,6 +414,7 @@ pub(super) fn draw_help_overlay(frame: &mut Frame, area: Rect, scroll: usize, ap
         "Return to the previous Catch Up source session",
     ));
     lines.push(help_entry("/resume", "Browse and resume previous sessions"));
+    lines.push(help_entry("/topic [slug]", "Open a Polianka topic manager"));
     lines.push(help_entry(
         "/active",
         "Manage live sessions: see which are working vs ready",
