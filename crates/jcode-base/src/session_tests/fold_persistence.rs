@@ -84,7 +84,7 @@ fn folds_persist_through_snapshot_and_journal() -> anyhow::Result<()> {
 #[test]
 fn fold_summaries_are_redacted_without_mutating_shared_source() {
     let mut session = session();
-    let secret = "sk-abcdefghijklmnopqrstuvwxyz12345678901234567890";
+    let secret = "ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123";
     Arc::make_mut(session.compaction.as_mut().unwrap()).folds[0].summary = secret.into();
     let exported = session.redacted_for_export();
     assert_ne!(exported.compaction.as_ref().unwrap().folds[0].summary, secret);
