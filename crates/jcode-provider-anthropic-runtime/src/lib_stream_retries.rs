@@ -101,6 +101,21 @@ pub(super) async fn run_stream_with_retries(
                 // Anthropic API", and the retry classifier needs to see it.
                 let error_str = format!("{e:#}").to_lowercase();
 
+                if !saw_output
+                    && !response_accepted
+                    && error_str.starts_with("anthropic api error (400 bad request):")
+                    && jcode_provider_anthropic::repair_rejected_prefill(
+                        &mut request.messages,
+                        &error_str,
+                    )
+                {
+                    jcode_base::logging::warn(&format!(
+                        "Anthropic rejected the final turn as an assistant prefill; retrying with explicit user continuation: {e}"
+                    ));
+                    last_error = Some(e);
+                    continue;
+                }
+
                 // OAuth auth failures: force refresh and retry once immediately.
                 if is_oauth && is_oauth_auth_error(&error_str) && !attempted_forced_refresh {
                     attempted_forced_refresh = true;

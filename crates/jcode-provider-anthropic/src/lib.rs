@@ -325,6 +325,49 @@ pub fn is_invalid_native_replay_error(error: &str) -> bool {
         && (error.contains("invalid") || error.contains("search_result"))
 }
 
+/// Recover once from Anthropic rejecting the final turn as a prefill. A user
+/// turn containing only tool results can still trigger this upstream error.
+/// Keep those results first and add an explicit continuation to the same turn.
+pub fn repair_rejected_prefill(messages: &mut Vec<ApiMessage>, error: &str) -> bool {
+    if !error.contains("does not support assistant message prefill") {
+        return false;
+    }
+    let continuation = ApiContentBlock::Text {
+        text: CONTINUATION_USER_TURN.to_string(),
+        cache_control: None,
+    };
+    match messages.last_mut() {
+        Some(tail) if tail.role == "assistant" => {
+            // An interrupted native call can look like a paused turn, even
+            // when the server has no actual continuation for it.
+            if is_paused_server_tool_turn(tail) {
+                tail.content.pop();
+            }
+            if tail.content.is_empty() {
+                messages.pop();
+            }
+            if let Some(tail) = messages.last_mut().filter(|tail| tail.role == "user") {
+                tail.content.push(continuation);
+            } else {
+                messages.push(ApiMessage {
+                    role: "user".into(),
+                    content: vec![continuation],
+                });
+            }
+            true
+        }
+        Some(tail)
+            if tail.role == "user"
+                && !tail.content.is_empty()
+                && tail.content.iter().all(|block| matches!(block, ApiContentBlock::ToolResult { .. })) =>
+        {
+            tail.content.push(continuation);
+            true
+        }
+        _ => false,
+    }
+}
+
 /// Replace every replayed server tool block in `messages` with its plain-text
 /// summary. Used to recover from [`is_invalid_native_replay_error`]. Returns
 /// true when anything changed.

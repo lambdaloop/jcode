@@ -26,6 +26,45 @@ fn roles(messages: &[ApiMessage]) -> Vec<&str> {
     messages.iter().map(|m| m.role.as_str()).collect()
 }
 
+const PREFILL_ERROR: &str = "anthropic api error (400 bad request): this model does not support assistant message prefill. the conversation must end with a user message.";
+
+#[test]
+fn rejected_tool_result_tail_retries_with_explicit_user_text() {
+    let mut messages = vec![ApiMessage {
+        role: "user".into(),
+        content: vec![ApiContentBlock::ToolResult {
+            tool_use_id: "toolu_bash".into(),
+            content: ToolResultContent::Text("output".into()),
+            is_error: false,
+        }],
+    }];
+    let original = serde_json::to_value(&messages).unwrap();
+    assert!(!repair_rejected_prefill(&mut messages, "unrelated 400"));
+    assert_eq!(serde_json::to_value(&messages).unwrap(), original);
+
+    assert!(repair_rejected_prefill(&mut messages, PREFILL_ERROR));
+    let retry = serde_json::to_value(&messages).unwrap();
+    assert_eq!(roles(&messages), ["user"]);
+    assert_eq!(retry[0]["content"][0], original[0]["content"][0]);
+    assert_eq!(retry[0]["content"][1]["text"], CONTINUATION_USER_TURN);
+    assert!(!repair_rejected_prefill(&mut messages, PREFILL_ERROR));
+}
+
+#[test]
+fn rejected_native_pause_drops_unanswered_call_and_keeps_user_turn() {
+    let mut messages = format_messages(&[text_msg(Role::User, "search")], false);
+    messages.push(ApiMessage {
+        role: "assistant".into(),
+        content: vec![ApiContentBlock::Raw(json!({"type": "server_tool_use", "id": "srvtoolu_1"}))],
+    });
+    assert!(repair_rejected_prefill(&mut messages, PREFILL_ERROR));
+    assert_eq!(roles(&messages), ["user"]);
+    let retry = serde_json::to_value(&messages).unwrap();
+    assert_eq!(retry[0]["content"][0]["text"], "search");
+    assert_eq!(retry[0]["content"][1]["text"], CONTINUATION_USER_TURN);
+    assert!(!repair_rejected_prefill(&mut messages, PREFILL_ERROR));
+}
+
 #[test]
 fn transcript_ending_on_assistant_gets_a_continuation_user_turn() {
     let formatted = format_messages(

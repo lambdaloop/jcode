@@ -207,16 +207,18 @@ fn stored_server_blocks_become_text_without_the_tool() {
 fn paused_server_tool_turn_is_not_given_a_continuation_user_turn() {
     let mut messages = stored_search_turn();
     messages.pop();
-    // Drop the trailing answer text: the turn paused right after the search.
-    messages.last_mut().unwrap().content.pop();
+    // Drop both the answer and the result: this turn paused before the server
+    // tool returned. A completed tool result is not a resumable pause.
+    let content = &mut messages.last_mut().unwrap().content;
+    content.pop();
+    content.pop();
     let formatted =
         jcode_provider_anthropic::format_messages_with_native(&messages, false, &[], true);
     let last = serde_json::to_value(formatted.last().unwrap()).unwrap();
     assert_eq!(last["role"], "assistant");
-    assert_eq!(last["content"][1]["type"], "web_search_tool_result");
+    assert_eq!(last["content"][0]["type"], "server_tool_use");
 
-    // Without native replay the text fallback is ordinary assistant text, so
-    // the usual prefill repair still applies.
+    // Without native replay the unmatched tool call is omitted.
     let formatted =
         jcode_provider_anthropic::format_messages_with_native(&messages, false, &[], false);
     assert_eq!(formatted.last().unwrap().role, "user");
