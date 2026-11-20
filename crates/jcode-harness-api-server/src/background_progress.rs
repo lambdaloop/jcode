@@ -47,6 +47,19 @@ pub fn parse_background_notification(message: &str) -> Option<BackgroundProgress
 
     // Order matters: the progress header is a prefix-extension of the
     // completion header, so the longer marker is tested first.
+    // A task starting is its first tick, so clients see it before any progress.
+    if let Some(rest) = header.strip_prefix("**Background task started** ") {
+        let (task_id, rest) = split_backticked(rest)?;
+        return Some(BackgroundProgress {
+            session_id: String::new(),
+            task_id,
+            label: header_label(rest),
+            percent: None,
+            summary: "started".to_string(),
+            done: false,
+        });
+    }
+
     if let Some(rest) = header.strip_prefix("**Background task progress** ") {
         let (task_id, rest) = split_backticked(rest)?;
         let label = header_label(rest);

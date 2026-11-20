@@ -116,3 +116,14 @@ fn the_daemons_own_formatter_round_trips() {
     assert_eq!(parsed.task_id, "t42");
     assert!(parsed.done, "a completion was read as a progress tick");
 }
+
+#[test]
+fn a_task_starting_is_reported_as_a_first_tick() {
+    let progress = parse(
+        "**Background task started** `abc123` · `bash`\n\nJcode is running this in the background.",
+    );
+    assert_eq!(progress.task_id, "abc123");
+    assert_eq!(progress.label, "bash");
+    assert_eq!(progress.summary, "started");
+    assert!(!progress.done);
+}
