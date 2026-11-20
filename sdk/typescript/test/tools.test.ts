@@ -12,7 +12,7 @@ const call = (id = "c1", input: unknown = { value: "hello" }, session = "s1", na
 async function fixture(t: any, extra?: (req: any, send: (frame: any) => void) => boolean) {
   const requests: any[] = [];
   const server = await startMockHarness({
-    capabilities: ["session_tools"],
+    capabilities: ["session_tools", "session_tool_gate"],
     onRequest(req, send) {
       requests.push(req);
       if (extra?.(req, send)) return;

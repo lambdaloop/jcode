@@ -408,6 +408,7 @@ where
             .chain(user_connections_supported.then(|| "session_connections".to_string()))
             .chain(runtime_commands_supported.then(|| "runtime_commands".to_string()))
             .chain(session_tools_supported.then(|| "session_tools".to_string()))
+            .chain(daemon_caps.iter().any(|cap| cap == "session_tool_gate").then(|| "session_tool_gate".to_string()))
             .chain(
                 ["soft_interrupt_ids", "background_tool_result"]
                     .into_iter()

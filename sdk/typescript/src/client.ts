@@ -487,6 +487,7 @@ export class JcodeClient extends EventEmitter {
     const { workingDir, systemPrompt, tools } = typeof options === "string" ? { workingDir: options } : (options ?? {});
     if (tools) {
       this.requireSessionTools();
+      this.requireToolGate(tools);
       prepareTools(tools);
     }
     const frame = await this.expectReply(
@@ -503,9 +504,16 @@ export class JcodeClient extends EventEmitter {
     }
   }
 
+  private requireToolGate(options: SessionToolsOptions): void {
+    if (options.gate && !this.supports("session_tool_gate")) {
+      throw new HarnessError("unsupported", "This harness does not support session_tool_gate. Update the jcode runtime and API bridge.");
+    }
+  }
+
   /** Replace the session tool policy while idle. Await before sending another message. */
   async configureTools(sessionId: string, options: SessionToolsOptions): Promise<void> {
     this.requireSessionTools();
+    this.requireToolGate(options);
     if (this.configuringTools.has(sessionId)) {
       throw new HarnessError("busy", "A tool configuration request is already in flight for this session");
     }
