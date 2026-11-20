@@ -133,6 +133,10 @@ impl FoldRenderer {
         if let Some(ContentBlock::ToolResult { content, .. }) = tagged.content.iter_mut().find(|b| matches!(b, ContentBlock::ToolResult { .. })) {
             content.push('\n');
             content.push_str(&reference);
+        } else if let Some(at) = tagged.content.iter().position(|b| matches!(b, ContentBlock::ToolUse { .. })) {
+            // tool_use must close the assistant turn, or Anthropic reads the
+            // following tool_result turn as a prefill continuation.
+            tagged.content.insert(at, ContentBlock::Text { text: reference, cache_control: None });
         } else {
             tagged.content.push(ContentBlock::Text { text: reference, cache_control: None });
         }

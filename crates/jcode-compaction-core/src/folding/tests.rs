@@ -33,6 +33,17 @@ fn folded_prefix_is_byte_stable_after_append_and_reversible() {
 }
 
 #[test]
+fn ref_tag_never_follows_a_tool_use_block() {
+    let mut call = Message::user("thinking aloud");
+    call.content.push(ContentBlock::ToolUse { id: "a".into(), name: "tool".into(), input: serde_json::json!({}), thought_signature: None });
+    let history = vec![call, Message::user("recent")];
+    let rendered = FoldRenderer::default().render(&history, &[], 0, true);
+    let blocks: Vec<_> = rendered[0].content.iter().collect();
+    assert!(matches!(blocks.last(), Some(ContentBlock::ToolUse { .. })), "{blocks:?}");
+    assert!(serde_json::to_string(&rendered[0]).unwrap().contains("context-ref: m00001"));
+}
+
+#[test]
 fn range_expands_across_all_results_of_a_parallel_call() {
     let mut call = Message::user("call");
     for id in ["a", "b"] {
