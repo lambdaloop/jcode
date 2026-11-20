@@ -101,6 +101,7 @@ pub(super) async fn run_stream_with_retries(
                 // Anthropic API", and the retry classifier needs to see it.
                 let error_str = format!("{e:#}").to_lowercase();
 
+                let rejected_tail = jcode_provider_anthropic::describe_tail(&request.messages, 4);
                 if !saw_output
                     && !response_accepted
                     && error_str.starts_with("anthropic api error (400 bad request):")
@@ -110,7 +111,7 @@ pub(super) async fn run_stream_with_retries(
                     )
                 {
                     jcode_base::logging::warn(&format!(
-                        "Anthropic rejected the final turn as an assistant prefill; retrying with explicit user continuation: {e}"
+                        "Anthropic rejected the final turn as an assistant prefill; retrying with explicit user continuation (tail: {rejected_tail}): {e}"
                     ));
                     last_error = Some(e);
                     continue;

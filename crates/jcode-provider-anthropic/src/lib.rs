@@ -325,6 +325,36 @@ pub fn is_invalid_native_replay_error(error: &str) -> bool {
         && (error.contains("invalid") || error.contains("search_result"))
 }
 
+/// Compact role and block-kind summary of the last few messages, for logging
+/// why Anthropic rejected a request. Contains no message text.
+pub fn describe_tail(messages: &[ApiMessage], count: usize) -> String {
+    let start = messages.len().saturating_sub(count);
+    messages[start..]
+        .iter()
+        .map(|message| {
+            let kinds: Vec<&str> = message
+                .content
+                .iter()
+                .map(|block| match block {
+                    ApiContentBlock::Text { .. } => "text",
+                    ApiContentBlock::ToolUse { .. } => "tool_use",
+                    ApiContentBlock::ToolResult { .. } => "tool_result",
+                    ApiContentBlock::Thinking { .. } => "thinking",
+                    ApiContentBlock::Image { .. } => "image",
+                    ApiContentBlock::Raw(value) => value
+                        .get("type")
+                        .and_then(|kind| kind.as_str())
+                        .unwrap_or("raw"),
+                    #[allow(unreachable_patterns)]
+                    _ => "other",
+                })
+                .collect();
+            format!("{}[{}]", message.role, kinds.join(","))
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
 /// Recover once from Anthropic rejecting the final turn as a prefill. A user
 /// turn containing only tool results can still trigger this upstream error.
 /// Keep those results first and add an explicit continuation to the same turn.
