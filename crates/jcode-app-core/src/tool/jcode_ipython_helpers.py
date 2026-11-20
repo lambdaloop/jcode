@@ -1,8 +1,8 @@
 """Helpers preloaded into the jcode ipython kernel.
 
 Ported from pi-ipython-subagents' pi_rlm_runtime: show_image, rg_files,
-rg_search, plus thin rlm / agent_message / bg wrappers that call jcode tools
-(swarm, bash) through the host channel.
+rg_search, plus thin `swarm` and `bg` adapters that call jcode's native
+tools through the host channel.
 """
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ import shutil
 import subprocess
 from typing import Any, Iterable
 
-__all__ = ["show_image", "rg_files", "rg_search", "rlm", "agent_message", "bg", "jcode_tool"]
+__all__ = ["show_image", "rg_files", "rg_search", "swarm", "bg", "jcode_tool"]
 
 _RG_TIMEOUT_SECONDS = 60
 _RG_MAX_LINE_CHARS = 400
@@ -185,48 +185,16 @@ def jcode_tool(name: str, **args: Any) -> str:
     return _jcode_host_call(name, args)  # noqa: F821 (injected by the driver)
 
 
-class _Rlm:
-    """Spawn jcode swarm subagents: rlm("task", name="reviewer")."""
+def swarm(action: str, **kwargs: Any) -> str:
+    """Thin adapter to jcode's native `swarm` tool. kwargs are its exact schema.
 
-    def __call__(self, task: str, name: str | None = None, *, model: str | None = None,
-                 working_dir: str | None = None) -> str:
-        label = name or ("sub-" + "-".join(task.split()[:3]).lower())[:40]
-        args = {"action": "spawn", "label": label, "prompt": task}
-        if model:
-            args["model"] = model
-        if working_dir:
-            args["working_dir"] = working_dir
-        return jcode_tool("swarm", **args)
-
-    def list_subagents(self) -> str:
-        return jcode_tool("swarm", action="list")
-
-    def status(self) -> str:
-        return jcode_tool("swarm", action="status")
-
-    def wait(self, session_ids: list[str] | None = None, timeout_minutes: int = 30) -> str:
-        args: dict[str, Any] = {"action": "await_members", "timeout_minutes": timeout_minutes}
-        if session_ids:
-            args["session_ids"] = session_ids
-        return jcode_tool("swarm", **args)
-
-    def delete_subagent(self, session_id: str) -> str:
-        return jcode_tool("swarm", action="stop", session_ids=[session_id])
-
-
-class _AgentMessage:
-    def send(self, message: str, receiver_name: str | None = None) -> str:
-        args: dict[str, Any] = {"action": "message", "message": message}
-        if receiver_name:
-            args["to_session"] = receiver_name
-        return jcode_tool("swarm", **args)
-
-    def force_send(self, message: str, receiver_name: str) -> str:
-        return jcode_tool("swarm", action="message", message=message,
-                          to_session=receiver_name, delivery="interrupt")
-
-    def list_agents(self) -> str:
-        return jcode_tool("swarm", action="list")
+    Example:
+        swarm("spawn", label="auth-review",
+              prompt="Review the authorization flow and report findings.")
+        swarm("await_members", mode="all", timeout_minutes=30)
+        swarm("message", to_session="auth-review", message="Check tests next.")
+    """
+    return jcode_tool("swarm", action=action, **kwargs)
 
 
 class _Bg:
@@ -255,6 +223,4 @@ class _Bg:
         return jcode_tool("bg", action="wait", task_id=task_id, max_wait_seconds=timeout_seconds)
 
 
-rlm = _Rlm()
-agent_message = _AgentMessage()
 bg = _Bg()

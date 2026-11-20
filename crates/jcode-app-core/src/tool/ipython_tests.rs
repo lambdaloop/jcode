@@ -101,4 +101,43 @@ async fn live_kernel_persists_times_out_and_shows_images() {
     assert!(out.output.contains("True") || out.output.contains("rg"), "{}", out.output);
     let out = run("jcode_tool('nope')".into(), None).await;
     assert!(out.output.contains("RuntimeError") || out.output.contains("Unknown"), "{}", out.output);
+
+    // swarm() routes through Registry::execute to the registered swarm tool
+    // with the native schema, without any model call.
+    let seen = Arc::new(StdMutex::new(None::<Value>));
+    registry
+        .register("swarm".into(), Arc::new(RecordingSwarm(seen.clone())))
+        .await;
+    let out = run(
+        "print(swarm('spawn', label='auth-review', prompt='Review auth'))".into(),
+        None,
+    )
+    .await;
+    assert!(out.output.contains("spawned:auth-review"), "{}", out.output);
+    let args = seen.lock().unwrap().clone().expect("swarm called");
+    assert_eq!(args["action"], "spawn");
+    assert_eq!(args["label"], "auth-review");
+    assert_eq!(args["prompt"], "Review auth");
+    let out = run("jcode_tool('ipython', code='1')".into(), None).await;
+    assert!(out.output.contains("cannot be called"), "{}", out.output);
+}
+
+struct RecordingSwarm(Arc<StdMutex<Option<Value>>>);
+
+#[async_trait]
+impl Tool for RecordingSwarm {
+    fn name(&self) -> &str {
+        "swarm"
+    }
+    fn description(&self) -> &str {
+        "test swarm"
+    }
+    fn parameters_schema(&self) -> Value {
+        json!({"type": "object"})
+    }
+    async fn execute(&self, input: Value, _ctx: ToolContext) -> Result<ToolOutput> {
+        let label = input["label"].as_str().unwrap_or("").to_string();
+        *self.0.lock().unwrap() = Some(input);
+        Ok(ToolOutput::new(format!("spawned:{label}")))
+    }
 }

@@ -4,7 +4,7 @@
 //! `ipython_driver.py`, a JSON line-protocol REPL built on
 //! `IPython.core.interactiveshell`. Variables survive across calls. Cells are
 //! interrupted (SIGINT) when they exceed their timeout. Kernel code may call
-//! back into jcode tools (`rlm`, `agent_message`, `bg`, `jcode_tool`) through
+//! back into jcode tools (`swarm`, `bg`, `jcode_tool`) through
 //! the same channel, which the host serves with this session's registry.
 
 use super::{Tool, ToolContext, ToolOutput, WeakRegistry};
@@ -47,8 +47,8 @@ Variables, imports, and state persist across calls. Cells are interrupted after 
 (set timeout_seconds for slower cells). Prefer for data work, quick scripts, plotting, and \
 multi-step analysis. Preloaded: show_image(path|fig|PIL|bytes) attaches an image to the result; \
 rg_files(glob, path) and rg_search(pattern, path, glob=...) are bounded ripgrep helpers; \
-rlm(task, name=...) spawns a jcode subagent (rlm.status(), rlm.wait(), rlm.delete_subagent(id)); \
-agent_message.send(msg, receiver_name=...); bg(command, name=..., timeout_seconds=...) starts a \
+swarm(action, **kwargs) calls the native swarm tool with its exact schema, e.g. \
+swarm(\"spawn\", label=\"auth-review\", prompt=\"Review auth\") or swarm(\"await_members\", mode=\"all\"); bg(command, name=..., timeout_seconds=...) starts a \
 jcode background task (bg.list/status/logs/wait/kill); jcode_tool(name, **args) calls any tool. \
 Put `%%kernel` on the first line to list environments, or `%%kernel pixi [-e ENV]`, \
 `%%kernel uv [--with PKG ...] [--no-default-packages]`, `%%kernel python /path/to/python` to \
