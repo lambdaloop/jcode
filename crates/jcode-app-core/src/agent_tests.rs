@@ -2780,6 +2780,7 @@ async fn sdk_custom_compile_remote_schema_survives_locked_refresh() {
             enabled: Some(vec![]),
             disabled: vec![],
             system_prompt_append: None,
+            gate: false,
             custom: vec![crate::protocol::SessionToolDefinition {
                 name: "compile_remote".into(),
                 description: "SDK override".into(),

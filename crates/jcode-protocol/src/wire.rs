@@ -31,6 +31,9 @@ pub struct SessionToolConfig {
     pub disabled: Vec<String>,
     #[serde(default)]
     pub custom: Vec<SessionToolDefinition>,
+    /// Ask the owning client before every non-custom tool call (fail closed).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub gate: bool,
 }
 
 /// Client request to server

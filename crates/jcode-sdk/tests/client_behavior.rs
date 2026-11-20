@@ -722,6 +722,7 @@ fn session_tool_configuration_and_listing_preserve_typed_payloads() {
                 enabled: Some(vec!["read".into(), "greet".into()]),
                 disabled: vec!["bash".into()],
                 custom: vec![custom_tool()],
+                ..Default::default()
             },
         )
         .unwrap();
@@ -825,6 +826,7 @@ fn session_tool_methods_propagate_harness_errors() {
                     enabled: None,
                     disabled: vec![],
                     custom: vec![],
+                    ..Default::default()
                 },
             )
             .unwrap_err(),
@@ -853,6 +855,7 @@ fn session_tool_methods_reject_unexpected_replies() {
                     enabled: Some(vec![]),
                     disabled: vec![],
                     custom: vec![],
+                    ..Default::default()
                 }
             )
             .is_err()

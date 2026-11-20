@@ -39,6 +39,7 @@ impl Drop for ConnectionGuard {
         // includes the empty custom-tool list of a prompt-only overlay.
         state.overlays.retain(|_, overlay| {
             !(overlay.owner == self.0
+                && !overlay.config.gate
                 && overlay.config.enabled.is_none()
                 && overlay.config.disabled.is_empty()
                 && overlay.config.custom.iter().all(|tool| {
@@ -75,9 +76,9 @@ pub(crate) fn configure(
         anyhow::ensure!(
             !prompt.is_empty()
                 && prompt.trim() == prompt
-                && prompt.len() <= 16 * 1024
+                && prompt.len() <= 64 * 1024
                 && !prompt.contains('\0'),
-            "System prompt append must be nonempty, trimmed, NUL-free, and at most 16 KiB"
+            "System prompt append must be nonempty, trimmed, NUL-free, and at most 64 KiB"
         );
     }
     let valid_name = |name: &str| {
@@ -117,10 +118,15 @@ pub(crate) fn configure(
         anyhow::ensure!(valid_name(name), "Invalid tool name: {name}");
     }
     let mut state = STATE.write().unwrap_or_else(|e| e.into_inner());
+    anyhow::ensure!(
+        !config.custom.iter().any(|tool| tool.name == GATE_TOOL),
+        "{GATE_TOOL} is reserved for the tool gate"
+    );
     if config.enabled.is_none()
         && config.disabled.is_empty()
         && config.custom.is_empty()
         && config.system_prompt_append.is_none()
+        && !config.gate
     {
         if let Some(previous) = state.overlays.get(session) {
             anyhow::ensure!(
@@ -243,7 +249,62 @@ pub(crate) async fn execute(session: &str, name: &str, input: Value) -> Result<T
     execute_with_timeout(session, name, input, Duration::from_secs(120)).await
 }
 
+/// Reserved callback name for the client tool gate.
+pub(crate) const GATE_TOOL: &str = "jcode_tool_gate";
+
+/// True when this session's owner gates built-in tool calls. The flag
+/// survives an owner disconnect, so a gated session fails closed.
+pub(crate) fn gated(session: &str) -> bool {
+    config(session).is_some_and(|c| c.gate)
+}
+
+/// Ask the owning client whether a built-in tool call may run. `Ok(None)`
+/// allows it; `Ok(Some(reason))` blocks it. Every failure blocks.
+pub(crate) async fn gate(
+    session: &str,
+    tool: &str,
+    input: &Value,
+    cwd: Option<&str>,
+    call_id: &str,
+) -> Option<String> {
+    let request = serde_json::json!({"tool": tool, "input": input, "cwd": cwd, "call_id": call_id});
+    match execute_raw(session, GATE_TOOL, request, Duration::from_secs(120)).await {
+        Err(error) => Some(format!("tool gate unavailable ({error}); the call was not run")),
+        Ok(output) => match serde_json::from_str::<Value>(&output.output) {
+            Ok(reply) if reply["allow"] == Value::Bool(true) => None,
+            Ok(reply) if reply["allow"] == Value::Bool(false) => Some(
+                reply["reason"]
+                    .as_str()
+                    .unwrap_or("blocked by the session's tool gate")
+                    .to_string(),
+            ),
+            _ => Some("tool gate gave a malformed reply; the call was not run".to_string()),
+        },
+    }
+}
+
 async fn execute_with_timeout(
+    session: &str,
+    name: &str,
+    input: Value,
+    timeout: Duration,
+) -> Result<ToolOutput> {
+    {
+        let state = STATE.read().unwrap_or_else(|e| e.into_inner());
+        let overlay = state
+            .overlays
+            .get(session)
+            .ok_or_else(|| anyhow::anyhow!("SDK tool configuration disappeared"))?;
+        anyhow::ensure!(
+            overlay.config.custom.iter().any(|tool| tool.name == name)
+                && !tool_name_is_disabled(&overlay.config.disabled.iter().cloned().collect(), name),
+            "SDK tool is no longer enabled: {name}"
+        );
+    }
+    execute_raw(session, name, input, timeout).await
+}
+
+async fn execute_raw(
     session: &str,
     name: &str,
     input: Value,
@@ -258,11 +319,6 @@ async fn execute_with_timeout(
             .get(session)
             .cloned()
             .ok_or_else(|| anyhow::anyhow!("SDK tool configuration disappeared"))?;
-        anyhow::ensure!(
-            overlay.config.custom.iter().any(|tool| tool.name == name)
-                && !tool_name_is_disabled(&overlay.config.disabled.iter().cloned().collect(), name),
-            "SDK tool is no longer enabled: {name}"
-        );
         let sender = overlay
             .sender
             .ok_or_else(|| anyhow::anyhow!("SDK tool owner disconnected"))?;
@@ -290,7 +346,7 @@ async fn execute_with_timeout(
     let _guard = PendingGuard(call_id);
     tokio::time::timeout(timeout, rx)
         .await
-        .map_err(|_| anyhow::anyhow!("SDK tool callback timed out after 120 seconds"))?
+        .map_err(|_| anyhow::anyhow!("SDK tool callback timed out after {} seconds", timeout.as_secs()))?
         .map_err(|_| anyhow::anyhow!("SDK tool owner disconnected"))?
 }
 
@@ -411,6 +467,7 @@ mod tests {
                     enabled: enabled.clone(),
                     disabled: disabled.clone(),
                     system_prompt_append: None,
+                    gate: false,
                 },
                 tx.clone(),
             )

@@ -892,6 +892,25 @@ impl Registry {
         // this call (exit 2 or JSON deny), rewrite its input, or attach
         // context for the model. Skipped entirely when not configured.
         let mut input = input;
+        // Client tool gate (SDK `gate: true`): the owning client decides every
+        // built-in call. Fails closed when the owner is gone or misbehaves.
+        if !is_custom && sdk::gated(&ctx.session_id) {
+            if let Some(reason) = sdk::gate(
+                &ctx.session_id,
+                resolved_name,
+                &input,
+                working_dir.as_deref(),
+                &ctx.tool_call_id,
+            )
+            .await
+            {
+                let mut fields =
+                    Self::tool_lifecycle_fields("blocked", name, resolved_name, &input, &ctx);
+                fields.push(("block_reason".to_string(), reason.clone()));
+                crate::logging::event_warn("TOOL_LIFECYCLE", fields);
+                return Err(anyhow::anyhow!("{reason}"));
+            }
+        }
         let mut gate_context: Vec<String> = Vec::new();
         if crate::hooks::hook_configured("pre_tool") {
             let input_json = input.to_string();

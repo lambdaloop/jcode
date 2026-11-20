@@ -176,6 +176,7 @@ mod tests {
                 description: "resource bridge".into(),
                 parameters: json!({"type":"object"}),
             }],
+            gate: false,
         };
         let result = with_speech(with_speech(original));
         assert_eq!(result.custom.len(), 2);

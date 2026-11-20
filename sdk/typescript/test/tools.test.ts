@@ -199,3 +199,31 @@ test("switching attachments drops old callbacks before processing subsequent eve
   await delay(20);
   assert.equal(executions, 0);
 });
+
+test("gate and systemPromptAppend go on the wire and the gate decides built-in calls, failing closed on a throw", async (t) => {
+  const gateCall = (id: string, tool: string) => ({ v: 1, ev: "tool_call", session_id: "s1", call_id: id, name: "jcode_tool_gate", input: { tool, input: {}, cwd: null, call_id: id } });
+  const { client, requests, result } = await fixture(t, (req, send) => {
+    if (req.req !== "configure_tools") return false;
+    send({ v: 1, reply_to: req.id, ev: "ok" });
+    send(gateCall("g1", "read"));
+    send(gateCall("g2", "write"));
+    send(gateCall("g3", "bash"));
+    return true;
+  });
+  await client.configureTools("s1", { systemPromptAppend: "Topic rules.", gate: (req) => {
+    if (req.tool === "bash") throw new Error("boom");
+    return req.tool === "read" ? { allow: true } : { allow: false, reason: `no ${req.tool}` };
+  } });
+  const wire = requests.find((r) => r.req === "configure_tools").tools;
+  assert.deepEqual(wire, { disabled: [], custom: [], system_prompt_append: "Topic rules.", gate: true });
+  assert.deepEqual(JSON.parse((await result("g1")).output), { allow: true });
+  assert.deepEqual(JSON.parse((await result("g2")).output), { allow: false, reason: "no write" });
+  const failed = JSON.parse((await result("g3")).output);
+  assert.equal(failed.allow, false);
+  assert.match(failed.reason, /boom/);
+});
+
+test("jcode_tool_gate is reserved for the gate option", async (t) => {
+  const { client } = await fixture(t);
+  await assert.rejects(client.configureTools("s1", { custom: [{ name: "jcode_tool_gate", description: "x", parameters: { type: "object" }, execute: () => "" }] }), /reserved/);
+});

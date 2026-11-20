@@ -29,7 +29,29 @@ export interface SessionToolsOptions {
   disabled?: string[];
   /** Custom tools are added to the selection, replacing same-name tools in this session only. */
   custom?: SdkTool[];
+  /** Session-only instructions appended to the system prompt while this client stays attached. */
+  systemPromptAppend?: string;
+  /**
+   * Decide every built-in tool call before it runs. Return `{ allow: false, reason }` to block it.
+   * Fails closed: a throw, a timeout or this client disconnecting blocks the call.
+   */
+  gate?: (request: ToolGateRequest, context: ToolExecutionContext) => ToolGateDecision | Promise<ToolGateDecision>;
 }
+
+export interface ToolGateRequest {
+  tool: string;
+  input: unknown;
+  cwd: string | null;
+  call_id: string;
+}
+
+export interface ToolGateDecision {
+  allow: boolean;
+  reason?: string;
+}
+
+/** Reserved callback name the daemon uses for `gate`. */
+export const GATE_TOOL = "jcode_tool_gate";
 
 type Handler = { tool: SdkTool; validate: ValidateFunction };
 export interface PreparedTools {
@@ -42,6 +64,7 @@ export function prepareTools(options: SessionToolsOptions): PreparedTools {
   const handlers = new Map<string, Handler>();
   const ajv = new Ajv({ strict: false, allErrors: true, addUsedSchema: false });
   const custom = (options.custom ?? []).map((tool) => {
+    if (tool.name === GATE_TOOL) throw new HarnessError("invalid_option", `${GATE_TOOL} is reserved; use the gate option`);
     if (handlers.has(tool.name)) throw new HarnessError("invalid_option", `duplicate tool: ${tool.name}`);
     if (typeof tool.execute !== "function") throw new HarnessError("invalid_option", `${tool.name} needs an execute callback`);
     const timeout = tool.timeoutMs ?? 60_000;
@@ -65,10 +88,25 @@ export function prepareTools(options: SessionToolsOptions): PreparedTools {
     handlers.set(tool.name, { tool: { ...tool, ...definition, timeoutMs: timeout }, validate });
     return definition;
   });
-  return {
-    wire: { enabled: options.enabled == null ? options.enabled : [...options.enabled], disabled: [...(options.disabled ?? [])], custom },
-    handlers,
-  };
+  if (options.gate) {
+    const decide = options.gate;
+    const gateTool: SdkTool = {
+      name: GATE_TOOL, description: "tool gate", parameters: { type: "object" }, timeoutMs: 60_000,
+      async execute(input, context) {
+        try {
+          const d = await decide(input as unknown as ToolGateRequest, context);
+          return JSON.stringify({ allow: d?.allow === true, ...(d?.reason ? { reason: d.reason } : {}) });
+        } catch (error) {
+          return JSON.stringify({ allow: false, reason: `tool gate failed: ${error instanceof Error ? error.message : String(error)}` });
+        }
+      },
+    };
+    handlers.set(GATE_TOOL, { tool: gateTool, validate: ajv.compile({ type: "object" }) });
+  }
+  const wire: ToolConfiguration = { enabled: options.enabled == null ? options.enabled : [...options.enabled], disabled: [...(options.disabled ?? [])], custom };
+  if (options.systemPromptAppend !== undefined) wire.system_prompt_append = options.systemPromptAppend;
+  if (options.gate) wire.gate = true;
+  return { wire, handlers };
 }
 
 /** Connection-local dispatch. Events on observing connections never execute callbacks. */

@@ -24,6 +24,16 @@ pub struct ToolConfiguration {
     /// Additive custom tools, overriding a built-in/MCP tool with the same name.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub custom: Vec<SessionToolDefinition>,
+    /// Session-only instructions appended to the system prompt while the
+    /// configuring client stays attached (at most 64 KiB).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub system_prompt_append: Option<String>,
+    /// Ask this client before every non-custom tool call. The daemon sends a
+    /// `tool_call` named `jcode_tool_gate` with `{tool, input, cwd, call_id}`
+    /// and expects `{"allow": bool, "reason"?: string}`. Fails closed: a
+    /// disconnected owner, a timeout or a malformed reply blocks the call.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub gate: bool,
 }
 
 /// Curated request surface. Internally-tagged on `"req"`.

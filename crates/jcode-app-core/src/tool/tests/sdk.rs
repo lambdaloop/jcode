@@ -24,7 +24,7 @@ fn sdk_system_prompt_append_validation_and_disconnect() {
         " leading".into(),
         "trailing\n".into(),
         "a\0b".into(),
-        "x".repeat(16 * 1024 + 1),
+        "x".repeat(64 * 1024 + 1),
     ] {
         let mut bad = config.clone();
         bad.system_prompt_append = Some(invalid);
@@ -45,7 +45,7 @@ fn sdk_system_prompt_append_validation_and_disconnect() {
         session,
         "prompt-boundary-owner",
         SessionToolConfig {
-            system_prompt_append: Some("x".repeat(16 * 1024)),
+            system_prompt_append: Some("x".repeat(64 * 1024)),
             ..Default::default()
         },
         mpsc::unbounded_channel().0,
@@ -122,6 +122,7 @@ async fn sdk_selection_replacement_validation_and_isolation() {
         disabled: vec![],
         custom: vec![custom("read"), custom("local")],
         system_prompt_append: None,
+        gate: false,
     };
     sdk::configure(&own_session, "selection-owner", config.clone(), tx.clone()).unwrap();
     let definitions = agent.tool_definitions_for_debug().await;
@@ -281,6 +282,7 @@ async fn sdk_disabled_batch_subcalls_and_cancel_cleanup() {
             disabled: vec!["read".into()],
             custom: vec![custom("read"), custom("callback")],
             system_prompt_append: None,
+            gate: false,
         },
         tx.clone(),
     )
@@ -351,6 +353,7 @@ fn sdk_inheritance_and_deferred_mcp_policy() {
             enabled: Some(vec!["mcp_call".into()]),
             disabled: vec!["mcp__test__blocked".into()],
             system_prompt_append: None,
+            gate: false,
             custom: vec![],
         },
         tx.clone(),
@@ -412,6 +415,7 @@ async fn sdk_nested_alias_and_deferred_mcp_use_callbacks() {
         disabled: vec![],
         custom: vec![custom("shell_exec"), custom("mcp__sdk__echo")],
         system_prompt_append: None,
+        gate: false,
     };
     sdk::configure(session, "nested-owner", config.clone(), tx.clone()).unwrap();
     for (surface, input, expected) in [
@@ -491,4 +495,66 @@ async fn sdk_nested_alias_and_deferred_mcp_use_callbacks() {
         .unwrap_err();
     assert!(error.to_string().contains("not allowed"));
     assert!(rx.try_recv().is_err());
+}
+
+#[tokio::test]
+async fn sdk_tool_gate_allows_denies_and_fails_closed_on_disconnect() {
+    let _lock = crate::storage::lock_test_env();
+    let home = tempfile::tempdir().unwrap();
+    let _home = TestHomeGuard::new(home.path());
+    let session = "sdk-gate";
+    let _cleanup = Cleanup(session.into());
+    let (tx, mut rx) = mpsc::unbounded_channel();
+    let reserved = SessionToolConfig {
+        custom: vec![custom(sdk::GATE_TOOL)],
+        ..Default::default()
+    };
+    assert!(sdk::configure(session, "gate-owner", reserved, tx.clone()).is_err());
+    sdk::configure(
+        session,
+        "gate-owner",
+        SessionToolConfig {
+            gate: true,
+            ..Default::default()
+        },
+        tx,
+    )
+    .unwrap();
+    let registry = Registry::new(Arc::new(MockProvider)).await;
+    let path = home.path().join("gated.txt");
+    std::fs::write(&path, "secret").unwrap();
+    for (reply, allowed) in [
+        (r#"{"allow":true}"#, true),
+        (r#"{"allow":false,"reason":"not in your access"}"#, false),
+        ("garbage", false),
+    ] {
+        let run_registry = registry.clone();
+        let file = path.display().to_string();
+        let task = tokio::spawn(async move {
+            run_registry
+                .execute("read", json!({"file_path": file}), ctx(session))
+                .await
+        });
+        let ServerEvent::ToolCall {
+            call_id, name, input, ..
+        } = rx.recv().await.unwrap()
+        else {
+            panic!("expected gate callback");
+        };
+        assert_eq!(name, sdk::GATE_TOOL);
+        assert_eq!(input["tool"], "read");
+        sdk::complete("gate-owner", session, &call_id, reply.into(), None).unwrap();
+        let result = task.await.unwrap();
+        assert_eq!(result.is_ok(), allowed, "{reply}: {result:?}");
+        if reply.contains("not in your access") {
+            assert!(format!("{:#}", result.unwrap_err()).contains("not in your access"));
+        }
+    }
+    drop(sdk::ConnectionGuard("gate-owner".into()));
+    assert!(sdk::gated(session), "a gated overlay must survive its owner");
+    let blocked = registry
+        .execute("read", json!({"file_path": path.display().to_string()}), ctx(session))
+        .await
+        .unwrap_err();
+    assert!(format!("{blocked:#}").contains("tool gate unavailable"), "{blocked:#}");
 }

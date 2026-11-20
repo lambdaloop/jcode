@@ -153,6 +153,10 @@ export interface ToolConfiguration {
   enabled?: string[] | null;
   disabled?: string[];
   custom?: SessionToolDefinition[];
+  /** Session-only instructions appended to the system prompt (at most 64 KiB). */
+  system_prompt_append?: string;
+  /** Ask the owning client before every built-in tool call (fail closed). */
+  gate?: boolean;
 }
 
 export type ApiRequest =
