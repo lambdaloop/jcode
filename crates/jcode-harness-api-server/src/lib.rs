@@ -380,6 +380,7 @@ where
     let user_connections_supported = daemon_caps.iter().any(|cap| cap == "session_connections");
     let runtime_commands_supported = daemon_caps.iter().any(|cap| cap == "runtime_commands");
     let session_tools_supported = daemon_caps.iter().any(|cap| cap == "session_tools");
+    let session_tool_gate_supported = daemon_caps.iter().any(|cap| cap == "session_tool_gate");
     let soft_interrupt_ids_supported = daemon_caps.iter().any(|cap| cap == "soft_interrupt_ids");
     let hello_ok = ServerFrame::reply(
         reply_to,
@@ -408,7 +409,7 @@ where
             .chain(user_connections_supported.then(|| "session_connections".to_string()))
             .chain(runtime_commands_supported.then(|| "runtime_commands".to_string()))
             .chain(session_tools_supported.then(|| "session_tools".to_string()))
-            .chain(daemon_caps.iter().any(|cap| cap == "session_tool_gate").then(|| "session_tool_gate".to_string()))
+            .chain(session_tool_gate_supported.then(|| "session_tool_gate".to_string()))
             .chain(
                 ["soft_interrupt_ids", "background_tool_result"]
                     .into_iter()
@@ -427,6 +428,7 @@ where
     let mut state =
         translate::BridgeState::with_crash_on_disconnect(client_name.starts_with("jcode-desktop-"));
     state.session_tools_supported = session_tools_supported;
+    state.session_tool_gate_supported = session_tool_gate_supported;
     state.supports_user_response = hello["supports_user_response"].as_bool().unwrap_or(false);
     state.client_name = Some(client_name.to_string()).filter(|n| !n.is_empty());
     state.runtime_commands_supported = runtime_commands_supported;

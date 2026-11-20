@@ -129,6 +129,7 @@ pub struct BridgeState {
     pub runtime_commands_supported: bool,
     /// Set only after a safe legacy ping capability probe succeeds.
     pub session_tools_supported: bool,
+    pub session_tool_gate_supported: bool,
     /// The daemon accepts soft interrupt ids and per-id cancellation, and
     /// replies to `background_tool` with a result.
     pub soft_interrupt_ids_supported: bool,
@@ -483,6 +484,11 @@ impl BridgeState {
                     ErrorCode::UnknownSession,
                     "request does not match the pending attachment",
                 );
+            }
+            if req == "configure_tools" && request["tools"]["gate"].as_bool() == Some(true)
+                && !self.session_tool_gate_supported
+            {
+                return Self::error_reply(api_id, ErrorCode::InvalidRequest, "daemon does not support session_tool_gate");
             }
             if !self.session_tools_supported {
                 return Self::error_reply(

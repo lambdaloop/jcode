@@ -159,6 +159,8 @@ export interface LaunchOptions {
    * Pass a stable path to keep sessions across runs.
    */
   jcodeHome?: string;
+  /** Separate private socket directory for homes whose paths exceed OS socket limits. */
+  runtimeDir?: string;
   /** Working directory for sessions created in this instance. */
   workingDir?: string;
   /**
@@ -531,7 +533,7 @@ export async function launchInstance(options: LaunchOptions = {}): Promise<Launc
   // home is what makes the instance private: the daemon binds its socket
   // there rather than in the shared $XDG_RUNTIME_DIR, so a launched instance
   // and the user's own jcode cannot collide or find each other.
-  const runtimeDir = path.join(jcodeHome, "run");
+  const runtimeDir = options.runtimeDir ?? path.join(jcodeHome, "run");
   fs.mkdirSync(runtimeDir, { recursive: true, mode: 0o700 });
   const socketPath = path.join(runtimeDir, "jcode-api.sock");
 
