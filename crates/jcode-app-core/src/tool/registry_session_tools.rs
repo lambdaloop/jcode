@@ -4,7 +4,7 @@ use super::*;
 use context_folding::{ContextFoldingTool, FoldAction};
 
 impl Registry {
-    fn insert_session_tools(&self, tools: &mut HashMap<String, Arc<dyn Tool>>) {
+    pub(super) fn insert_session_tools(&self, tools: &mut HashMap<String, Arc<dyn Tool>>) {
         Self::insert_tool(tools, "batch", batch::BatchTool::new(self.downgrade()));
         Self::insert_tool(
             tools,

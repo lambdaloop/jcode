@@ -3886,6 +3886,7 @@ name = "jcode-compaction-core"
 version = "0.1.0"
 dependencies = [
  "jcode-message-types",
+ "serde",
  "serde_json",
 ]
 
@@ -4523,6 +4524,7 @@ name = "jcode-session-types"
 version = "0.1.0"
 dependencies = [
  "chrono",
+ "jcode-compaction-core",
  "jcode-message-types",
  "libc",
  "memchr",

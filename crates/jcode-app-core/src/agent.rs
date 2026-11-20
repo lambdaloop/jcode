@@ -329,6 +329,7 @@ pub struct Agent {
     /// would get a surface built for the other path (for example
     /// `mcp_search` without `mcp_call` or any MCP tools).
     locked_tools_native_deferred: bool,
+    locked_tools_fold_mode: bool,
     /// MCP tools already described to the model, either in the locked tool
     /// snapshot or by a late-tool transcript announcement.
     announced_mcp_tools: HashSet<String>,
@@ -487,6 +488,7 @@ impl Agent {
             mcp_late_register_resolved: false,
             last_recovery_compaction: None,
             locked_tools_native_deferred: false,
+            locked_tools_fold_mode: false,
             announced_mcp_tools: HashSet::new(),
             announced_mcp_scan_index: 0,
             agents_md_snapshot,
@@ -909,13 +911,13 @@ impl Agent {
                 )
             };
         let state = crate::session::StoredCompactionState {
+            folds: Vec::new(),
             summary_text,
             openai_encrypted_content: openai_encrypted_content.map(Into::into),
             covers_up_to_turn: compacted_count,
             original_turn_count: compacted_count,
             compacted_count,
         };
-
         self.session.compaction = Some(Arc::new(state.clone()));
         let mut post_tokens = None;
         if let Ok(mut manager) = compaction.try_write() {
@@ -941,81 +943,6 @@ impl Agent {
             .force_attribution(),
         );
         Ok((pre_tokens, post_tokens))
-    }
-
-    fn messages_for_provider(&mut self) -> (Vec<Message>, Option<CompactionEvent>) {
-        if self.provider.supports_compaction() || self.session.compaction.is_some() {
-            let compaction = self.registry.compaction();
-            match compaction.try_write() {
-                Ok(mut manager) => {
-                    let discarded_oversized_native =
-                        manager.discard_oversized_openai_native_compaction();
-                    let messages = {
-                        let all_messages = self.session.provider_messages();
-                        if self.provider.uses_jcode_compaction() {
-                            let action =
-                                manager.ensure_context_fits(all_messages, self.provider.clone());
-                            match action {
-                                crate::compaction::CompactionAction::BackgroundStarted {
-                                    trigger,
-                                } => {
-                                    logging::info(&format!(
-                                        "Background compaction started ({})",
-                                        trigger
-                                    ));
-                                }
-                                crate::compaction::CompactionAction::HardCompacted(dropped) => {
-                                    logging::warn(&format!(
-                                        "Emergency hard compact: dropped {} messages (context was critical)",
-                                        dropped
-                                    ));
-                                }
-                                crate::compaction::CompactionAction::None => {}
-                            }
-                        }
-                        manager.messages_for_api_with(all_messages)
-                    };
-                    let event = manager.take_compaction_event();
-                    if event.is_some() || discarded_oversized_native {
-                        self.sync_session_compaction_state_from_manager(&manager);
-                    }
-                    if event.is_some() {
-                        self.note_compaction_applied();
-                        self.persist_session_best_effort("compaction completion");
-                    }
-                    let user_count = messages
-                        .iter()
-                        .filter(|message| matches!(message.role, Role::User))
-                        .count();
-                    let assistant_count = messages.len().saturating_sub(user_count);
-                    logging::info(&format!(
-                        "messages_for_provider (compaction): returning {} messages (user={}, assistant={})",
-                        messages.len(),
-                        user_count,
-                        assistant_count,
-                    ));
-                    return (messages, event);
-                }
-                Err(_) => {
-                    logging::info("messages_for_provider: compaction lock failed, using session");
-                }
-            };
-        }
-
-        let all_messages = self.session.provider_messages();
-        let messages = all_messages.to_vec();
-        let user_count = messages
-            .iter()
-            .filter(|message| matches!(message.role, Role::User))
-            .count();
-        let assistant_count = messages.len().saturating_sub(user_count);
-        logging::info(&format!(
-            "messages_for_provider (session): returning {} messages (user={}, assistant={})",
-            messages.len(),
-            user_count,
-            assistant_count,
-        ));
-        (messages, None)
     }
 
     fn record_client_cache_request(&mut self, messages: &[Message]) {
@@ -1157,6 +1084,7 @@ impl Agent {
         self.tool_output_scan_index = self.session.messages.len();
 
         if repaired > 0 {
+            self.reseed_compaction_after_repair();
             self.persist_session_best_effort("missing tool-output repair");
             self.cache_tracker.reset();
             self.kv_cache_monitor.reset();

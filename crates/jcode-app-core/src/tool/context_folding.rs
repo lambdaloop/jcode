@@ -157,9 +157,9 @@ mod tests {
             guard.set_mode(CompactionMode::ModelDriven);
             guard.prepare_context_folds(&[
                 crate::message::Message::user(&"old detail ".repeat(100)),
-                crate::message::Message::assistant("done"),
+                crate::message::Message::assistant_text("done"),
                 crate::message::Message::user("next task"),
-                crate::message::Message::assistant("working"),
+                crate::message::Message::assistant_text("working"),
             ]);
         }
         let compress = ContextFoldingTool::new(manager.clone(), FoldAction::Compress);

@@ -25,6 +25,7 @@ use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
 use std::time::Instant;
 use tokio::task::JoinHandle;
+mod folding;
 
 pub use jcode_compaction_core::{
     CHARS_PER_TOKEN, COMPACTION_THRESHOLD, CRITICAL_THRESHOLD, CompactionAction, CompactionEvent,
@@ -139,6 +140,7 @@ pub struct CompactionManager {
 
     /// Active summary (if we've compacted before)
     active_summary: Option<Summary>,
+    folding: folding::FoldingState,
 
     /// Rolling char estimate for the active (non-compacted) message suffix.
     ///
@@ -219,6 +221,7 @@ impl CompactionManager {
         Self {
             compacted_count: 0,
             active_summary: None,
+            folding: folding::FoldingState::default(),
             active_chars: ActiveCharEstimate::default(),
             pending_task: None,
             pending_trigger: None,
@@ -380,7 +383,8 @@ impl CompactionManager {
         self.compacted_count = state.compacted_count.min(total_messages);
         self.active_chars
             .reset_pending(total_messages > self.compacted_count);
-        self.active_summary = Some(Summary {
+        self.restore_context_folds(state, total_messages);
+        self.active_summary = (state.folds.is_empty() || state.compacted_count > 0 || !state.summary_text.is_empty() || state.openai_encrypted_content.is_some()).then(|| Summary {
             text: state.summary_text.clone(),
             openai_encrypted_content: state.openai_encrypted_content.clone(),
             covers_up_to_turn: state.covers_up_to_turn,
@@ -418,38 +422,6 @@ impl CompactionManager {
                 .map(|message| content_char_count(&message.content))
                 .sum(),
         );
-    }
-
-    /// Compare the persisted view exactly without cloning its potentially large
-    /// encrypted payload. This must track every field exported by persisted_state.
-    pub fn persisted_state_matches(
-        &self,
-        state: Option<&crate::session::StoredCompactionState>,
-    ) -> bool {
-        match (self.active_summary.as_ref(), state) {
-            (None, None) => true,
-            (Some(summary), Some(state)) => {
-                summary.text == state.summary_text
-                    && summary.openai_encrypted_content == state.openai_encrypted_content
-                    && summary.covers_up_to_turn == state.covers_up_to_turn
-                    && summary.original_turn_count == state.original_turn_count
-                    && self.compacted_count == state.compacted_count
-            }
-            _ => false,
-        }
-    }
-
-    /// Export the currently active compacted view for persistence.
-    pub fn persisted_state(&self) -> Option<crate::session::StoredCompactionState> {
-        self.active_summary
-            .as_ref()
-            .map(|summary| crate::session::StoredCompactionState {
-                summary_text: summary.text.clone(),
-                openai_encrypted_content: summary.openai_encrypted_content.clone(),
-                covers_up_to_turn: summary.covers_up_to_turn,
-                original_turn_count: summary.original_turn_count,
-                compacted_count: self.compacted_count,
-            })
     }
 
     /// Drop provider-native OpenAI compaction state when it can no longer be
@@ -851,7 +823,7 @@ impl CompactionManager {
     pub fn token_estimate_with(&self, all_messages: &[Message]) -> usize {
         estimate_compaction_tokens(
             self.active_summary.as_ref(),
-            self.active_message_chars_with(all_messages),
+            self.active_message_chars_with(all_messages).saturating_sub(self.folded_chars_saved()),
             self.token_budget,
         )
     }
@@ -904,6 +876,7 @@ impl CompactionManager {
         }
         let active = self.active_messages(all_messages);
         match self.mode {
+            CompactionMode::ModelDriven => false,
             CompactionMode::Reactive => {
                 self.pending_task.is_none()
                     && (self.context_usage_with(all_messages)
@@ -1002,6 +975,7 @@ impl CompactionManager {
         all_messages: &[Message],
         provider: Arc<dyn Provider>,
     ) -> CompactionAction {
+        self.prepare_context_folds(all_messages);
         self.refresh_context_cap();
         // If we're already critically full, hard-compact synchronously *before*
         // kicking off any background compaction. Starting a background task here
@@ -1357,45 +1331,6 @@ impl CompactionManager {
         self.last_compaction.take()
     }
 
-    /// Get messages for API call (with summary if compacted).
-    /// Takes the full message list from the caller.
-    pub fn messages_for_api_with(&mut self, all_messages: &[Message]) -> Vec<Message> {
-        self.check_and_apply_compaction_with(all_messages);
-        self.discard_oversized_openai_native_compaction();
-
-        let active = self.active_messages(all_messages);
-
-        match &self.active_summary {
-            Some(summary) => {
-                let summary_block = summary
-                    .openai_encrypted_content
-                    .as_ref()
-                    .map(|encrypted_content| ContentBlock::OpenAICompaction {
-                        encrypted_content: encrypted_content.to_string(),
-                    })
-                    .unwrap_or_else(|| ContentBlock::Text {
-                        text: compacted_summary_text_block(&summary.text),
-                        cache_control: None,
-                    });
-
-                let mut result = Vec::with_capacity(active.len() + 1);
-
-                result.push(Message {
-                    role: Role::User,
-                    content: vec![summary_block].into(),
-                    timestamp: None,
-                    tool_duration_ms: None,
-                });
-
-                // Clone only the active (non-compacted) messages
-                result.extend(active.iter().cloned());
-
-                result
-            }
-            None => active.to_vec(),
-        }
-    }
-
     /// Check if compaction is in progress
     pub fn is_compacting(&self) -> bool {
         self.pending_task.is_some()
@@ -1408,6 +1343,11 @@ impl CompactionManager {
 
     /// Change the active compaction mode for this session at runtime.
     pub fn set_mode(&mut self, mode: crate::config::CompactionMode) {
+        if mode == crate::config::CompactionMode::ModelDriven && let Some(task) = self.pending_task.take() {
+            task.abort();
+            self.pending_cutoff = 0;
+            self.pending_trigger = None;
+        }
         self.mode = mode.clone();
         self.compaction_config.mode = mode;
     }

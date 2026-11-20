@@ -34,6 +34,10 @@ context rather than guessing them. The summary should preserve decisions,
 constraints, outstanding tasks, and details needed to continue. Keep the
 returned fold ID if the original span may be needed later.
 
+A new fold can cover several existing folds as long as it includes each one
+in full. The replacement ID restores the entire span, including the original
+messages behind the older folds.
+
 ### `decompress`
 
 Restore a folded span using its numeric `fold_id`:
@@ -65,3 +69,5 @@ original span when exact wording or evidence matters. Retained originals
 still consume storage, and retention remains subject to session persistence
 and available disk space. Folding does not provide unlimited physical
 storage or guarantee that every future request will fit the model window.
+If emergency compaction moves past a fold, use `conversation_search` to
+recover excerpts from the transcript rather than reopening the whole span.

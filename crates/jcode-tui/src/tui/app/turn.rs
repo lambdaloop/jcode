@@ -91,13 +91,13 @@ impl App {
                 return Ok(());
             }
 
-            let (provider_messages, compaction_event) = self.messages_for_provider();
+            let (mut provider_messages, compaction_event) = self.messages_for_provider();
             if let Some(event) = compaction_event {
                 self.handle_compaction_event(event);
             }
 
             let tools = self.registry.definitions(None).await;
-            // Non-blocking memory: uses pending result from last turn, spawns check for next turn
+            self.append_context_fold_nudge(&tools, &mut provider_messages);
             let memory_pending = self.build_memory_prompt_nonblocking(&provider_messages);
             // Use split prompt for better caching - static content cached, dynamic not.
             // Memory rides as an ephemeral tail message, never in the system
@@ -982,7 +982,7 @@ impl App {
                                         pre_tokens,
                                         openai_encrypted_content,
                                     } => {
-                                        if let Some(encrypted_content) = openai_encrypted_content {
+                                        if let Some(encrypted_content) = openai_encrypted_content.filter(|_| !tools.iter().any(|tool| tool.name == "compress")) {
                                             openai_native_compaction
                                                 .get_or_insert_with(|| {
                                                     (encrypted_content, self.local_transcript_message_count())

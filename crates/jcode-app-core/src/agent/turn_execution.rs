@@ -564,6 +564,7 @@ impl Agent {
     }
 
     pub(super) async fn tool_definitions(&mut self) -> Vec<ToolDefinition> {
+        self.refresh_fold_tool_snapshot().await;
         if self.session.is_canary {
             self.registry.register_selfdev_tools().await;
         }
@@ -590,8 +591,7 @@ impl Agent {
             return self.native_deferred_tool_definitions().await;
         }
 
-        // Return locked tools if available (prevents cache invalidation from
-        // tools arriving asynchronously after the first API request).
+        // Keep tool definitions stable across requests for prompt caching.
         //
         // Exception: MCP servers connect on a background task and register
         // `mcp__*` tools seconds after the session starts — typically *after*

@@ -93,7 +93,7 @@ impl Agent {
             // `messages` now owns the provider-facing request snapshot. Do not
             // retain the session's second, derived copy for the entire network
             // wait and response stream.
-            self.session.release_provider_messages_cache();
+            self.release_unfolded_provider_cache();
 
             let mut cache_signature_messages =
                 if crate::config::config().features.message_timestamps {
@@ -949,7 +949,7 @@ impl Agent {
                         pre_tokens,
                         openai_encrypted_content,
                     } => {
-                        if let Some(encrypted_content) = openai_encrypted_content {
+                        if let Some(encrypted_content) = self.accept_native_compaction(openai_encrypted_content) {
                             openai_native_compaction.get_or_insert((
                                 encrypted_content,
                                 self.session.messages.len(),

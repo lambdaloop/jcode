@@ -31,6 +31,8 @@ impl App {
             "manual" => "manual",
             "proactive" => "proactive",
             "semantic" => "semantic",
+            "model_driven" => "model-driven",
+            "decompress" => "restore fold",
             "reactive" => "reactive",
             "auto_recovery" => "automatic recovery",
             "hard_compact" => "emergency",
@@ -141,12 +143,14 @@ impl App {
             self.ensure_provider_messages_hydrated();
             self.messages.push(message.clone());
         }
-        if self.is_remote || !self.provider.uses_jcode_compaction() {
+        if self.is_remote {
             return;
         }
         let compaction = self.registry.compaction();
         if let Ok(mut manager) = compaction.try_write() {
-            manager.notify_message_added_with(&message);
+            if self.provider.uses_jcode_compaction() || manager.mode() == crate::config::CompactionMode::ModelDriven {
+                manager.notify_message_added_with(&message);
+            }
         };
     }
 
@@ -263,15 +267,16 @@ impl App {
             return (self.messages.clone(), None);
         }
         let base_messages = self.materialized_provider_messages();
-        if !self.provider.supports_compaction() && self.session.compaction.is_none() {
-            return (base_messages, None);
-        }
         let compaction = self.registry.compaction();
         match compaction.try_write() {
             Ok(mut manager) => {
+                let folding = manager.mode() == crate::config::CompactionMode::ModelDriven;
+                if !folding && !self.provider.supports_compaction() && self.session.compaction.is_none() {
+                    return (base_messages, None);
+                }
                 let discarded_oversized_native =
                     manager.discard_oversized_openai_native_compaction();
-                if self.provider.uses_jcode_compaction() {
+                if folding || self.provider.uses_jcode_compaction() {
                     let action = manager.ensure_context_fits(&base_messages, self.provider.clone());
                     match action {
                         crate::compaction::CompactionAction::BackgroundStarted { trigger } => {
@@ -292,6 +297,21 @@ impl App {
                 (messages, event)
             }
             Err(_) => (base_messages, None),
+        }
+    }
+
+    pub(super) fn append_context_fold_nudge(&mut self, tools: &[ToolDefinition], messages: &mut Vec<Message>) {
+        if !tools.iter().any(|tool| tool.name == "compress") { return; }
+        let compaction = self.registry.compaction();
+        let nudge = compaction.try_write().ok().and_then(|mut manager| manager.context_fold_nudge());
+        if let Some(nudge) = nudge {
+            let message = Message::user(&nudge);
+            self.session.add_message_with_display_role(Role::User, message.content, Some(crate::session::StoredDisplayRole::System));
+            if let Some(stored) = self.session.messages.last() {
+                let message = stored.to_message();
+                self.add_provider_message(message.clone());
+                messages.push(message);
+            }
         }
     }
 

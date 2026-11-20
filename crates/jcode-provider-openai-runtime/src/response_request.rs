@@ -39,8 +39,13 @@ impl OpenAIProvider {
         // value the API understands.
         let api_reasoning_effort = self.api_reasoning_effort(reasoning_effort.as_deref());
         let service_tier = self.effective_service_tier(model_id);
-        let native_compaction_threshold =
-            self.native_compaction_threshold_for_context_window(self.context_window());
+        let native_compaction_threshold = if tools.iter().any(|tool| tool.name == "compress")
+            && tools.iter().any(|tool| tool.name == "context_status")
+        {
+            None
+        } else {
+            self.native_compaction_threshold_for_context_window(self.context_window())
+        };
         Self::build_response_request(
             model_id,
             system.to_string(),

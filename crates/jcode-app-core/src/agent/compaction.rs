@@ -1,6 +1,76 @@
 use super::*;
 
 impl Agent {
+    pub(super) fn reseed_compaction_after_repair(&mut self) {
+        let compaction = self.registry.compaction();
+        let mode = compaction.try_read().ok().map(|manager| manager.mode());
+        self.seed_compaction_from_session();
+        if let (Some(mode), Ok(mut manager)) = (mode, compaction.try_write()) {
+            manager.set_mode(mode);
+        }
+    }
+
+    pub(super) fn release_unfolded_provider_cache(&mut self) {
+        if !self.locked_tools_fold_mode {
+            self.session.release_provider_messages_cache();
+        }
+    }
+
+    pub(super) fn accept_native_compaction(&self, encrypted: Option<String>) -> Option<String> {
+        if self.locked_tools_fold_mode {
+            // Native artifacts cover the provider view, not canonical transcript ranges.
+            None
+        } else {
+            encrypted
+        }
+    }
+
+    pub(super) fn messages_for_provider(&mut self) -> (Vec<Message>, Option<CompactionEvent>) {
+        let compaction = self.registry.compaction();
+        if let Ok(mut manager) = compaction.try_write() {
+            let folding = manager.mode() == crate::config::CompactionMode::ModelDriven;
+            if folding || self.provider.supports_compaction() || self.session.compaction.is_some() {
+                let discarded = manager.discard_oversized_openai_native_compaction();
+                let all_messages = self.session.provider_messages();
+                if folding || self.provider.uses_jcode_compaction() {
+                    manager.ensure_context_fits(all_messages, self.provider.clone());
+                }
+                let messages = manager.messages_for_api_with(all_messages);
+                let event = manager.take_compaction_event();
+                if event.is_some() || discarded {
+                    self.sync_session_compaction_state_from_manager(&manager);
+                }
+                if event.is_some() {
+                    self.note_compaction_applied();
+                    self.persist_session_best_effort("compaction completion");
+                }
+                return (messages, event);
+            }
+        }
+        (self.session.provider_messages().to_vec(), None)
+    }
+
+    pub(super) fn append_context_fold_nudge(&mut self, tools: &[ToolDefinition], messages: &mut Vec<Message>) {
+        if !tools.iter().any(|tool| tool.name == "compress") { return; }
+        let compaction = self.registry.compaction();
+        let nudge = compaction.try_write().ok().and_then(|mut manager| manager.context_fold_nudge());
+        if let Some(nudge) = nudge {
+            let mut message = Message::user(&nudge);
+            self.add_message_with_display_role(Role::User, message.content.clone(), Some(StoredDisplayRole::System));
+            message.timestamp = self.session.messages.last().and_then(|stored| stored.timestamp);
+            messages.push(message);
+        }
+    }
+
+    pub(super) async fn refresh_fold_tool_snapshot(&mut self) {
+        let enabled = self.compaction_mode().await == crate::config::CompactionMode::ModelDriven;
+        if enabled != self.locked_tools_fold_mode {
+            self.note_compaction_applied();
+            self.mcp_late_register_resolved = false;
+        }
+        self.locked_tools_fold_mode = enabled;
+    }
+
     /// Flush an idle session before optional process replacement. Never abandon
     /// a pending compaction or lose a completed summary that has not been polled.
     pub(crate) fn checkpoint_idle_runtime_upgrade(&mut self) -> Result<()> {
@@ -149,7 +219,7 @@ impl Agent {
         if !Self::is_context_limit_error(error) {
             return false;
         }
-        if !self.provider.supports_compaction() {
+        if !self.provider.supports_compaction() && !self.locked_tools_fold_mode {
             return false;
         }
 
@@ -394,7 +464,7 @@ impl Agent {
         cache_read_input_tokens: Option<u64>,
         cache_creation_input_tokens: Option<u64>,
     ) {
-        if !self.provider.uses_jcode_compaction() || input_tokens == 0 {
+        if (!self.provider.uses_jcode_compaction() && !self.locked_tools_fold_mode) || input_tokens == 0 {
             return;
         }
         let observed = self.effective_context_tokens_from_usage(

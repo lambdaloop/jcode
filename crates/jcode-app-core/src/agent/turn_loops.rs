@@ -68,7 +68,7 @@ impl Agent {
             self.provider
                 .prewarm(&tools, &split_prompt.static_part)
                 .await;
-            let (messages, compaction_event) = self.messages_for_provider();
+            let (mut messages, compaction_event) = self.messages_for_provider();
             if let Some(event) = compaction_event {
                 // Reset cache tracker and tool lock on compaction since the message history changes
                 self.cache_tracker.reset();
@@ -91,11 +91,11 @@ impl Agent {
                 split_prompt = self.build_system_prompt_split(None);
             }
 
+            self.append_context_fold_nudge(&tools, &mut messages);
             let messages: std::sync::Arc<[Message]> = messages.into();
             // Non-blocking memory: uses pending result from last turn, spawns check for next turn
             let memory_pending =
                 self.build_memory_prompt_nonblocking_shared(std::sync::Arc::clone(&messages), None);
-            // Use split prompt for better caching - static content cached, dynamic not
             self.log_prompt_prefix_accounting(&split_prompt, &tools);
 
             // Check for client-side cache violations before memory injection.
@@ -105,7 +105,7 @@ impl Agent {
 
             // The request snapshot now owns everything the provider needs. Drop
             // the session's derived transcript copy before the network wait.
-            self.session.release_provider_messages_cache();
+            self.release_unfolded_provider_cache();
 
             // Inject memory as a user message at the end (preserves cache prefix)
             let mut messages_with_memory: Vec<Message> = messages.iter().cloned().collect();
@@ -698,7 +698,7 @@ impl Agent {
                         pre_tokens,
                         openai_encrypted_content,
                     } => {
-                        if let Some(encrypted_content) = openai_encrypted_content {
+                        if let Some(encrypted_content) = self.accept_native_compaction(openai_encrypted_content) {
                             openai_native_compaction
                                 .get_or_insert((encrypted_content, self.session.messages.len()));
                         }

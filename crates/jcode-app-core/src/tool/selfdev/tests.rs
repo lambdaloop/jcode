@@ -548,6 +548,7 @@ async fn enter_creates_selfdev_session_in_test_mode() {
             covers_up_to_turn: 1,
             original_turn_count: 1,
             compacted_count: 1,
+            folds: Vec::new(),
         }
         .into(),
     );
