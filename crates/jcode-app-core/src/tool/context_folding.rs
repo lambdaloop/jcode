@@ -108,12 +108,14 @@ impl Tool for ContextFoldingTool {
                 let fold_id = manager.write().await
                     .compress_context(&args.start, &args.end, args.summary)
                     .map_err(anyhow::Error::msg)?;
+                crate::compaction::live_session::mark_dirty(&ctx.session_id);
                 json!({"fold_id": fold_id})
             }
             FoldAction::Decompress => {
                 let args: DecompressInput = serde_json::from_value(input)?;
                 manager.write().await.decompress_context(args.fold_id)
                     .map_err(anyhow::Error::msg)?;
+                crate::compaction::live_session::mark_dirty(&ctx.session_id);
                 json!({"fold_id": args.fold_id, "decompressed": true})
             }
             FoldAction::Status => manager.read().await.context_fold_status(),
@@ -210,6 +212,8 @@ mod tests {
         assert!(compress.model_visible());
         let result = compress.execute(json!({"intent":"save space", "start":"m00001", "end":"m00001", "summary":"Old work completed."}), context()).await.unwrap();
         let fold_id = serde_json::from_str::<Value>(&result.output).unwrap()["fold_id"].as_u64().unwrap();
+        // The agent owns the session write, so a fold must flag it for persistence.
+        assert!(crate::compaction::live_session::take_dirty(&context().session_id));
         let status = ContextFoldingTool::new(registry.clone().downgrade(), FoldAction::Status);
         let result = status.execute(json!({"intent":"inspect context"}), context()).await.unwrap();
         let value: Value = serde_json::from_str::<Value>(&result.output).unwrap();

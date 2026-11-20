@@ -20,6 +20,12 @@ fn table() -> &'static Mutex<HashMap<String, Weak<RwLock<CompactionManager>>>> {
     TABLE.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
+/// Sessions whose fold state changed since the last time it was persisted.
+fn dirty() -> &'static Mutex<std::collections::HashSet<String>> {
+    static DIRTY: OnceLock<Mutex<std::collections::HashSet<String>>> = OnceLock::new();
+    DIRTY.get_or_init(|| Mutex::new(std::collections::HashSet::new()))
+}
+
 fn lock() -> std::sync::MutexGuard<'static, HashMap<String, Weak<RwLock<CompactionManager>>>> {
     match table().lock() {
         Ok(guard) => guard,
@@ -39,4 +45,28 @@ pub fn publish(session_id: &str, manager: &SharedCompaction) {
 pub fn resolve(session_id: &str) -> Option<SharedCompaction> {
     let entries = lock();
     entries.get(session_id).and_then(Weak::upgrade)
+}
+
+/// Note that `session_id` folded or unfolded context and owes a session write.
+///
+/// Fold state reaches the session file through the agent that owns it, and a
+/// tool has no handle on that agent. The tool marks the session here and the
+/// next turn persists it.
+pub fn mark_dirty(session_id: &str) {
+    match dirty().lock() {
+        Ok(mut sessions) => {
+            sessions.insert(session_id.to_string());
+        }
+        Err(poisoned) => {
+            poisoned.into_inner().insert(session_id.to_string());
+        }
+    }
+}
+
+/// Clear the pending write for `session_id`, reporting whether one was owed.
+pub fn take_dirty(session_id: &str) -> bool {
+    match dirty().lock() {
+        Ok(mut sessions) => sessions.remove(session_id),
+        Err(poisoned) => poisoned.into_inner().remove(session_id),
+    }
 }

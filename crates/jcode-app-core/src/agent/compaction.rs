@@ -41,7 +41,11 @@ impl Agent {
                 let messages = manager.messages_for_api_with(all_messages);
                 crate::compaction::live_session::publish(&self.session.id, &compaction);
                 let event = manager.take_compaction_event();
-                if event.is_some() || discarded {
+                // A fold tool mutated this manager during the last turn; the
+                // session only learns about folds through the agent, so write it
+                // here (sync persists on its own when the states differ).
+                let folded = crate::compaction::live_session::take_dirty(&self.session.id);
+                if event.is_some() || discarded || folded {
                     self.sync_session_compaction_state_from_manager(&manager);
                 }
                 if event.is_some() {

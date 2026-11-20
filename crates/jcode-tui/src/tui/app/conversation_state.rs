@@ -292,7 +292,8 @@ impl App {
                 let messages = manager.messages_for_api_with(&base_messages);
                 crate::compaction::live_session::publish(&self.session.id, &compaction);
                 let event = manager.take_compaction_event();
-                if event.is_some() || discarded_oversized_native {
+                let folded = crate::compaction::live_session::take_dirty(&self.session.id);
+                if event.is_some() || discarded_oversized_native || folded {
                     self.sync_session_compaction_state_from_manager(&manager);
                 }
                 (messages, event)
