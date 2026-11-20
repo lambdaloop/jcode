@@ -84,6 +84,7 @@ fn foreign_or_changed_route_snapshots_are_rejected() {
             _ => {
                 changed.compaction = Some(
                     jcode_session_types::StoredCompactionState {
+                        folds: Vec::new(),
                         summary_text: "new summary".into(),
                         openai_encrypted_content: None,
                         covers_up_to_turn: 2,

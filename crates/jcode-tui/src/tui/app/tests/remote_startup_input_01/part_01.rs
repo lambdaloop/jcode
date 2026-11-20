@@ -220,6 +220,7 @@ fn test_prepare_review_spawned_session_uses_visible_transcript_for_judge_session
             child.replace_messages(parent.messages.clone());
             child.compaction = Some(
                 crate::session::StoredCompactionState {
+                    folds: Vec::new(),
                     summary_text: "stale compaction".to_string(),
                     openai_encrypted_content: None,
                     covers_up_to_turn: 1,

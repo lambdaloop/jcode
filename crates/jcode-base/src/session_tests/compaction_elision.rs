@@ -15,6 +15,7 @@ fn stripped_metadata_save_preserves_authoritative_compaction() -> anyhow::Result
         }],
     );
     let compaction = StoredCompactionState {
+        folds: Vec::new(),
         summary_text: "Keep this summary".to_string(),
         openai_encrypted_content: None,
         covers_up_to_turn: 1,

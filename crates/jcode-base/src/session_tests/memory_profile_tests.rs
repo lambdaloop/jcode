@@ -110,6 +110,7 @@ fn test_debug_memory_profile_reports_messages_and_provider_cache() {
 
     session.compaction = Some(
         StoredCompactionState {
+            folds: Vec::new(),
             summary_text: "summary".to_string(),
             openai_encrypted_content: None,
             covers_up_to_turn: 7,

@@ -5,6 +5,7 @@ use std::sync::Arc;
 
 fn large_state(tag: &str) -> StoredCompactionState {
     StoredCompactionState {
+        folds: Vec::new(),
         summary_text: format!("summary {tag}"),
         openai_encrypted_content: Some(
             format!("{tag}{}", "encrypted-body-".repeat(32 * 1024)).into(),

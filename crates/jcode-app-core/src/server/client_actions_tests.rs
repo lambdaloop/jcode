@@ -136,6 +136,7 @@ fn clone_split_session_uses_persisted_session_state() {
     );
     parent.compaction = Some(
         crate::session::StoredCompactionState {
+            folds: Vec::new(),
             summary_text: "summary".to_string(),
             openai_encrypted_content: None,
             covers_up_to_turn: 1,

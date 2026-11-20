@@ -1,52 +1,8 @@
 use super::*;
 use anyhow::{Result, anyhow};
 
-#[test]
-fn token_usage_totals_counts_cache_reported_inputs_only_when_cache_fields_exist() {
-    let mut session = Session::create_with_id(
-        "session_token_usage_totals_test".to_string(),
-        None,
-        Some("Token totals".to_string()),
-    );
-    session.add_message_ext(
-        Role::Assistant,
-        vec![ContentBlock::Text {
-            text: "first".to_string(),
-            cache_control: None,
-        }],
-        None,
-        Some(StoredTokenUsage {
-            prompt_tokens: None,
-            input_tokens: 100,
-            output_tokens: 10,
-            cache_read_input_tokens: None,
-            cache_creation_input_tokens: None,
-        }),
-    );
-    session.add_message_ext(
-        Role::Assistant,
-        vec![ContentBlock::Text {
-            text: "second".to_string(),
-            cache_control: None,
-        }],
-        None,
-        Some(StoredTokenUsage {
-            prompt_tokens: None,
-            input_tokens: 200,
-            output_tokens: 20,
-            cache_read_input_tokens: Some(150),
-            cache_creation_input_tokens: Some(25),
-        }),
-    );
-
-    let totals = session.token_usage_totals();
-    assert_eq!(totals.messages_with_token_usage, 2);
-    assert_eq!(totals.input_tokens, 300);
-    assert_eq!(totals.output_tokens, 30);
-    assert_eq!(totals.cache_reported_input_tokens, 200);
-    assert_eq!(totals.cache_read_input_tokens, 150);
-    assert_eq!(totals.cache_creation_input_tokens, 25);
-}
+#[path = "cases_initial_tests.rs"]
+mod initial_tests;
 
 #[test]
 fn initial_session_context_is_persisted_once_and_not_overwritten() {
@@ -643,6 +599,7 @@ fn test_save_persists_compaction_state() -> Result<()> {
     );
     session.compaction = Some(
         StoredCompactionState {
+            folds: Vec::new(),
             summary_text: "saved summary".to_string(),
             openai_encrypted_content: None,
             covers_up_to_turn: 8,
@@ -686,6 +643,7 @@ fn test_startup_stub_save_preserves_compaction_state() -> Result<()> {
     // Compaction lands in the journal, as it does for a live large session.
     owner.compaction = Some(
         StoredCompactionState {
+            folds: Vec::new(),
             summary_text: "owner summary".to_string(),
             openai_encrypted_content: None,
             covers_up_to_turn: 3,
@@ -1544,6 +1502,7 @@ fn failed_wake_errors_follow_compacted_history_window() {
     session.replay_events.last_mut().unwrap().timestamp = start + chrono::Duration::seconds(101);
     session.compaction = Some(
         StoredCompactionState {
+            folds: Vec::new(),
             summary_text: "older context".into(),
             openai_encrypted_content: None,
             covers_up_to_turn: 20,
@@ -1782,6 +1741,7 @@ fn test_render_messages_shows_recent_compacted_history_by_default() {
     );
     session.compaction = Some(
         StoredCompactionState {
+            folds: Vec::new(),
             summary_text: "old prompt and response".to_string(),
             openai_encrypted_content: None,
             covers_up_to_turn: 2,
@@ -1834,6 +1794,7 @@ fn test_render_messages_can_expand_compacted_history_window() {
     );
     session.compaction = Some(
         StoredCompactionState {
+            folds: Vec::new(),
             summary_text: "old prompt and response".to_string(),
             openai_encrypted_content: None,
             covers_up_to_turn: 2,
@@ -1913,6 +1874,7 @@ fn test_compacted_history_truncates_only_when_long_and_many_turns() {
     let compacted_count = prefix_turns * 5; // every prefix message is compacted
     session.compaction = Some(
         StoredCompactionState {
+            folds: Vec::new(),
             summary_text: "older compacted context".to_string(),
             openai_encrypted_content: None,
             covers_up_to_turn: prefix_turns,
@@ -1985,6 +1947,7 @@ fn test_compacted_history_never_truncates_single_long_turn() {
     let compacted_count = 151; // prompt + 150 responses
     session.compaction = Some(
         StoredCompactionState {
+            folds: Vec::new(),
             summary_text: "older compacted context".to_string(),
             openai_encrypted_content: None,
             covers_up_to_turn: 1,
@@ -2048,6 +2011,7 @@ fn test_compacted_history_window_counts_renderable_messages_not_hidden_reminders
     );
     session.compaction = Some(
         StoredCompactionState {
+            folds: Vec::new(),
             summary_text: "older compacted context".to_string(),
             openai_encrypted_content: None,
             covers_up_to_turn: 4,
@@ -2655,6 +2619,7 @@ fn restored_tool_image_boundaries_follow_returned_history_rows() {
     // stored message indices or user-prompt ordinals.
     session.compaction = Some(
         StoredCompactionState {
+            folds: Vec::new(),
             summary_text: "summary".into(),
             openai_encrypted_content: None,
             covers_up_to_turn: 1,
@@ -3080,6 +3045,7 @@ fn route_journal_legacy_entries_preserve_snapshot_and_prior_journal_route() -> R
 
 fn big_compaction(tag: &str) -> std::sync::Arc<crate::session::StoredCompactionState> {
     crate::session::StoredCompactionState {
+        folds: Vec::new(),
         summary_text: String::new(),
         openai_encrypted_content: Some(format!("{tag}{}", "e".repeat(300 * 1024)).into()),
         covers_up_to_turn: 3,

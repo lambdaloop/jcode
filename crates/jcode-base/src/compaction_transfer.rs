@@ -27,6 +27,7 @@ pub async fn build_transfer_compaction_state(
     let total_turns = prior_turns + messages.len();
 
     Ok(Some(crate::session::StoredCompactionState {
+        folds: Vec::new(),
         summary_text: result.summary_text,
         openai_encrypted_content: result.openai_encrypted_content.map(Into::into),
         covers_up_to_turn: total_turns,

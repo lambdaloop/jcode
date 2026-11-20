@@ -25,6 +25,7 @@ fn compacted_tool_session(turns: usize) -> Session {
     }
     session.compaction = Some(
         StoredCompactionState {
+            folds: Vec::new(),
             summary_text: "summary".into(),
             openai_encrypted_content: None,
             covers_up_to_turn: turns,

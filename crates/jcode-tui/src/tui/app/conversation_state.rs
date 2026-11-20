@@ -234,6 +234,7 @@ impl App {
                 )
             };
         let state = crate::session::StoredCompactionState {
+            folds: Vec::new(),
             summary_text,
             openai_encrypted_content: openai_encrypted_content.map(Into::into),
             covers_up_to_turn: compacted_count,

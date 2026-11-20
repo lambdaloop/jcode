@@ -1226,6 +1226,9 @@ request in this new forked session, using the inherited conversation only as con
         if let Some(compaction) = redacted.compaction.as_mut() {
             let compaction = std::sync::Arc::make_mut(compaction);
             compaction.summary_text = crate::message::redact_secrets(&compaction.summary_text);
+            for fold in &mut compaction.folds {
+                fold.summary = crate::message::redact_secrets(&fold.summary);
+            }
         }
         for msg in &mut redacted.messages {
             redaction::redact_shared_content(&mut msg.content);
@@ -1406,26 +1409,6 @@ request in this new forked session, using the inherited conversation only as con
             .cloned();
         if let Some(message) = first_prompt {
             self.adopt_prompt_title(&message);
-        }
-    }
-
-    pub fn insert_message(&mut self, index: usize, message: StoredMessage) {
-        self.messages.insert(index, message);
-        self.mark_memory_profile_dirty();
-        self.mark_messages_full_dirty();
-    }
-
-    pub fn replace_messages(&mut self, messages: Vec<StoredMessage>) {
-        self.messages = messages;
-        self.mark_memory_profile_dirty();
-        self.mark_messages_full_dirty();
-    }
-
-    pub fn truncate_messages(&mut self, len: usize) {
-        if len < self.messages.len() {
-            self.messages.truncate(len);
-            self.mark_memory_profile_dirty();
-            self.mark_messages_full_dirty();
         }
     }
 
@@ -1699,6 +1682,8 @@ request in this new forked session, using the inherited conversation only as con
 
 #[path = "session_redaction.rs"]
 mod redaction;
+#[path = "session/transcript_mutations.rs"]
+mod transcript_mutations;
 #[cfg(test)]
 use redaction::redact_json_value;
 
@@ -1772,6 +1757,9 @@ mod tests;
 #[cfg(test)]
 #[path = "session_tests/shared_compaction.rs"]
 mod shared_compaction_tests;
+#[cfg(test)]
+#[path = "session_tests/fold_persistence.rs"]
+mod fold_persistence_tests;
 
 #[cfg(test)]
 #[path = "session_tests/shared_payload.rs"]

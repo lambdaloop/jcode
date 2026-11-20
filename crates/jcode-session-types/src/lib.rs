@@ -306,6 +306,8 @@ pub struct StoredTokenUsage {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct StoredCompactionState {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub folds: Vec<jcode_compaction_core::folding::ContextFold>,
     pub summary_text: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     // Shared with manager summaries and copy-on-write session snapshots.

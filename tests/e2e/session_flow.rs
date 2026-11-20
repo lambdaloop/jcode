@@ -50,6 +50,7 @@ async fn resume_session_restores_persisted_compaction_for_provider_context() -> 
         );
         session.compaction = Some(
             StoredCompactionState {
+                folds: Vec::new(),
                 summary_text: "Worked on Gemini OAuth reload fixes.".to_string(),
                 openai_encrypted_content: None,
                 covers_up_to_turn: 2,

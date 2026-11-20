@@ -146,6 +146,7 @@ fn populated_agent(index: usize) -> Agent {
         );
     }
     session.compaction = Some(Arc::new(crate::session::StoredCompactionState {
+        folds: Vec::new(),
         summary_text: "summary\n\"界".repeat(128),
         openai_encrypted_content: Some("encrypted".repeat(1024).into()),
         covers_up_to_turn: 2,
