@@ -385,7 +385,10 @@ impl CompactionManager {
         self.active_chars
             .reset_pending(total_messages > self.compacted_count);
         self.restore_context_folds(state, total_messages);
-        self.active_summary = (state.folds.is_empty() || state.compacted_count > 0 || !state.summary_text.is_empty() || state.openai_encrypted_content.is_some()).then(|| Summary {
+        // Folds alone are not a summary: an empty summary message in front of the
+        // transcript would be sent to the provider on every request.
+        let has_summary = !state.summary_text.is_empty() || state.openai_encrypted_content.is_some();
+        self.active_summary = has_summary.then(|| Summary {
             text: state.summary_text.clone(),
             openai_encrypted_content: state.openai_encrypted_content.clone(),
             covers_up_to_turn: state.covers_up_to_turn,

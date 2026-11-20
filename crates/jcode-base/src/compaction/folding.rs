@@ -17,7 +17,13 @@ impl CompactionManager {
         self.folding.folds.sort_unstable_by_key(|fold| fold.start);
         let mut next = 0;
         self.folding.folds.retain(|fold| {
-            if fold.start > fold.end || fold.end >= total || (fold.active && fold.start < next) {
+            // A provisional agent seeds before its transcript is restored, so
+            // `total` can still be zero. Judge the range only once the real
+            // length is known; `prepare_context_folds` prunes stale folds.
+            if fold.start > fold.end
+                || (total > 0 && fold.end >= total)
+                || (fold.active && fold.start < next)
+            {
                 return false;
             }
             if fold.active {
