@@ -18,4 +18,3 @@ fn test_scroll_render_bottom() {
         "expected ↑ indicator or prompt preview when content extends above viewport"
     );
 }
-

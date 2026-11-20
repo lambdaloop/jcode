@@ -3,7 +3,10 @@ use super::*;
 impl Agent {
     pub(super) fn reseed_compaction_after_repair(&mut self) {
         let compaction = self.registry.compaction();
-        let mode = compaction.try_read().ok().map(|manager| manager.mode());
+        let mode = match compaction.try_read() {
+            Ok(manager) => Some(manager.mode()),
+            Err(_) => None,
+        };
         self.seed_compaction_from_session();
         if let (Some(mode), Ok(mut manager)) = (mode, compaction.try_write()) {
             manager.set_mode(mode);
@@ -53,7 +56,11 @@ impl Agent {
     pub(super) fn append_context_fold_nudge(&mut self, tools: &[ToolDefinition], messages: &mut Vec<Message>) {
         if !tools.iter().any(|tool| tool.name == "compress") { return; }
         let compaction = self.registry.compaction();
-        let nudge = compaction.try_write().ok().and_then(|mut manager| manager.context_fold_nudge());
+        // A busy manager skips this advisory nudge. It is retried next turn.
+        let nudge = match compaction.try_write() {
+            Ok(mut manager) => manager.context_fold_nudge(),
+            Err(_) => None,
+        };
         if let Some(nudge) = nudge {
             let mut message = Message::user(&nudge);
             self.add_message_with_display_role(Role::User, message.content.clone(), Some(StoredDisplayRole::System));

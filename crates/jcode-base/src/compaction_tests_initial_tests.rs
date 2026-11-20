@@ -68,4 +68,3 @@ async fn test_hard_compact_aborts_inflight_background_compaction() {
         "active message slice must not be empty after hard compact"
     );
 }
-

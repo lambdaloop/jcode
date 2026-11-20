@@ -46,4 +46,3 @@ fn token_usage_totals_counts_cache_reported_inputs_only_when_cache_fields_exist(
     assert_eq!(totals.cache_read_input_tokens, 150);
     assert_eq!(totals.cache_creation_input_tokens, 25);
 }
-

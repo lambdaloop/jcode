@@ -27,4 +27,3 @@ fn test_model_picker_cursor_models_have_cursor_route() {
         composer_entry.options
     );
 }
-

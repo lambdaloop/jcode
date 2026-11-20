@@ -23,9 +23,12 @@ pub struct FoldRenderer {
 }
 
 pub fn parse_ref(value: &str) -> Result<usize, String> {
-    value.strip_prefix('m').and_then(|v| v.parse::<usize>().ok())
-        .and_then(|v| v.checked_sub(1))
-        .ok_or_else(|| "Expected a message reference such as m00001".to_string())
+    let invalid = || "Expected a message reference such as m00001".to_string();
+    let digits = value.strip_prefix('m').ok_or_else(invalid)?;
+    match digits.parse::<usize>() {
+        Ok(ordinal) => ordinal.checked_sub(1).ok_or_else(invalid),
+        Err(_) => Err(invalid()),
+    }
 }
 
 pub fn message_ref(index: usize) -> String { format!("m{:05}", index + 1) }

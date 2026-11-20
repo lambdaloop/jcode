@@ -122,7 +122,7 @@ impl CompactionManager {
         if self.active_summary.is_none() && self.folding.folds.is_empty() { return None; }
         let summary = self.active_summary.as_ref();
         Some(crate::session::StoredCompactionState {
-            summary_text: summary.map(|s| s.text.clone()).unwrap_or_default(),
+            summary_text: summary.map_or_else(String::new, |s| s.text.clone()),
             openai_encrypted_content: summary.and_then(|s| s.openai_encrypted_content.clone()),
             covers_up_to_turn: summary.map(|s| s.covers_up_to_turn).unwrap_or(0),
             original_turn_count: summary.map(|s| s.original_turn_count).unwrap_or(0),

@@ -303,7 +303,11 @@ impl App {
     pub(super) fn append_context_fold_nudge(&mut self, tools: &[ToolDefinition], messages: &mut Vec<Message>) {
         if !tools.iter().any(|tool| tool.name == "compress") { return; }
         let compaction = self.registry.compaction();
-        let nudge = compaction.try_write().ok().and_then(|mut manager| manager.context_fold_nudge());
+        // A busy manager just skips this turn's nudge. It is advisory and retried next turn.
+        let nudge = match compaction.try_write() {
+            Ok(mut manager) => manager.context_fold_nudge(),
+            Err(_) => None,
+        };
         if let Some(nudge) = nudge {
             let message = Message::user(&nudge);
             self.session.add_message_with_display_role(Role::User, message.content, Some(crate::session::StoredDisplayRole::System));
