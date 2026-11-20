@@ -20,7 +20,10 @@ fn test_ctrl_g_clears_input_when_idle() {
     app.handle_key(KeyCode::Char('g'), KeyModifiers::CONTROL)
         .unwrap();
 
-    assert!(app.input.is_empty(), "idle Ctrl+G clears the composer like Esc");
+    assert!(
+        app.input.is_empty(),
+        "idle Ctrl+G clears the composer like Esc"
+    );
     assert!(!app.cancel_requested);
 }
 

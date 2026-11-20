@@ -11,8 +11,8 @@ mod key_dispatch;
 
 use super::{
     App, ContentBlock, DisplayMessage, Message, ProcessingStatus, Role, SendAction, commands,
-    ctrl_bracket_fallback_to_esc, ctrl_g_to_esc, is_context_limit_error, is_request_payload_too_large_error,
-    remote,
+    ctrl_bracket_fallback_to_esc, ctrl_g_to_esc, is_context_limit_error,
+    is_request_payload_too_large_error, remote,
 };
 use crate::bus::{
     Bus, BusEvent, ClipboardPasteCompleted, ClipboardPasteContent, ClipboardPasteKind,

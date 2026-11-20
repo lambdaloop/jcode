@@ -336,18 +336,33 @@ pub(in super::super) fn draw_composer_frame(
     let inner = block.inner(area);
     frame.render_widget(block, area);
 
-    let elapsed = app.elapsed().map(|duration| format_elapsed(duration.as_secs_f32()));
-    let context = (!data.context_info_stale).then(|| {
-        let limit = data.context_limit.filter(|limit| *limit > 0)?;
-        let used = data.observed_context_tokens.or_else(|| {
-            data.context_info.as_ref().map(|info| info.estimated_tokens() as u64)
-        })?;
-        let percent = (used as f64 * 100.0 / limit as f64).round() as u64;
-        Some(format!("{percent}%/{}", crate::kv_cache_monitor::format_token_count(limit as u64)))
-    }).flatten();
+    let elapsed = app
+        .elapsed()
+        .map(|duration| format_elapsed(duration.as_secs_f32()));
+    let context = (!data.context_info_stale)
+        .then(|| {
+            let limit = data.context_limit.filter(|limit| *limit > 0)?;
+            let used = data.observed_context_tokens.or_else(|| {
+                data.context_info
+                    .as_ref()
+                    .map(|info| info.estimated_tokens() as u64)
+            })?;
+            let percent = (used as f64 * 100.0 / limit as f64).round() as u64;
+            Some(format!(
+                "{percent}%/{}",
+                crate::kv_cache_monitor::format_token_count(limit as u64)
+            ))
+        })
+        .flatten();
     let model = data.model.as_deref().unwrap_or_default();
-    let effort = data.reasoning_effort.as_deref().filter(|effort| *effort != "off");
-    let cost = data.usage_info.as_ref().map(|usage| usage.total_cost)
+    let effort = data
+        .reasoning_effort
+        .as_deref()
+        .filter(|effort| *effort != "off");
+    let cost = data
+        .usage_info
+        .as_ref()
+        .map(|usage| usage.total_cost)
         .filter(|cost| *cost > 0.0)
         .map(|cost| format!("${cost:.3}"));
     let right = [cost.as_deref(), Some(model), effort, context.as_deref()]
@@ -362,7 +377,11 @@ pub(in super::super) fn draw_composer_frame(
         .and_then(|name| name.to_str())
         .unwrap_or(cwd);
     for (y, left, right) in [
-        (area.y, elapsed.as_deref().unwrap_or_default(), right.as_str()),
+        (
+            area.y,
+            elapsed.as_deref().unwrap_or_default(),
+            right.as_str(),
+        ),
         (area.bottom() - 1, "", cwd),
     ] {
         frame.render_widget(
@@ -376,9 +395,13 @@ pub(in super::super) fn draw_composer_frame(
 fn composer_border_labels(width: u16, left: &str, right: &str, border: Style) -> Line<'static> {
     use jcode_tui_render::truncate_line_with_ellipsis_to_width as fit;
 
-    let label = |text: &str| Line::from(
-        text.chars().filter(|ch| !ch.is_control()).collect::<String>()
-    );
+    let label = |text: &str| {
+        Line::from(
+            text.chars()
+                .filter(|ch| !ch.is_control())
+                .collect::<String>(),
+        )
+    };
     let width = usize::from(width);
     let left = fit(&label(left), width.saturating_sub(6) / 3);
     let left_width = left.width() + if left.width() > 0 { 3 } else { 0 };
@@ -390,7 +413,10 @@ fn composer_border_labels(width: u16, left: &str, right: &str, border: Style) ->
         spans.extend(left.spans);
         spans.push(Span::raw(" "));
     }
-    spans.push(Span::styled("─".repeat(width - left_width - right_width), border));
+    spans.push(Span::styled(
+        "─".repeat(width - left_width - right_width),
+        border,
+    ));
     if right.width() > 0 {
         spans.push(Span::raw(" "));
         spans.extend(right.spans);

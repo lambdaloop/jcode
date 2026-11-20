@@ -605,7 +605,10 @@ pub(crate) fn ipython_cell_header(code: &str) -> String {
 #[cfg(test)]
 #[test]
 fn ipython_cell_header_counts_extra_lines() {
-    assert_eq!(ipython_cell_header("\nimport os\n\nprint(1)\n"), "import os  (+1 lines)");
+    assert_eq!(
+        ipython_cell_header("\nimport os\n\nprint(1)\n"),
+        "import os  (+1 lines)"
+    );
     assert_eq!(ipython_cell_header("x"), "x");
 }
 
@@ -768,7 +771,10 @@ pub(super) fn get_tool_summary_with_budget(
                 let budget = max_width
                     .map(|w| w.saturating_sub(4))
                     .unwrap_or(bash_max_chars);
-                format!("$ {}", truncate_command_display(&ipython_cell_header(code), budget))
+                format!(
+                    "$ {}",
+                    truncate_command_display(&ipython_cell_header(code), budget)
+                )
             })
             .unwrap_or_default(),
         "read" => {

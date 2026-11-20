@@ -75,7 +75,10 @@ impl KernelSpec {
             KernelSpec::Python(p) => format!("python {}", p.display()),
             KernelSpec::Pixi { root, env } => format!("pixi -e {env} ({})", root.display()),
             KernelSpec::Uv { extra, no_defaults } => {
-                format!("uv python 3.11 with {}", uv_packages(extra, *no_defaults).join(", "))
+                format!(
+                    "uv python 3.11 with {}",
+                    uv_packages(extra, *no_defaults).join(", ")
+                )
             }
         }
     }
@@ -115,10 +118,7 @@ pub(crate) fn find_pixi_env(start: &Path, env: &str) -> Option<PathBuf> {
 }
 
 /// Split a cell into an optional directive and the remaining code.
-pub(crate) fn parse_directive(
-    code: &str,
-    cwd: &Path,
-) -> Result<(Option<KernelDirective>, String)> {
+pub(crate) fn parse_directive(code: &str, cwd: &Path) -> Result<(Option<KernelDirective>, String)> {
     let trimmed = code.trim_start_matches(['\n', '\r']);
     let (first, rest) = trimmed.split_once('\n').unwrap_or((trimmed, ""));
     let first = first.trim();
@@ -137,7 +137,10 @@ pub(crate) fn parse_directive(
             let mut it = args[1..].iter();
             while let Some(a) = it.next() {
                 if a == "-e" || a == "--environment" {
-                    env = it.next().cloned().ok_or_else(|| anyhow!("-e needs a name"))?;
+                    env = it
+                        .next()
+                        .cloned()
+                        .ok_or_else(|| anyhow!("-e needs a name"))?;
                 } else if let Some(v) = a.strip_prefix("--environment=") {
                     env = v.to_string();
                 }
@@ -156,7 +159,11 @@ pub(crate) fn parse_directive(
             let mut it = args[1..].iter();
             while let Some(a) = it.next() {
                 if a == "--with" {
-                    extra.push(it.next().cloned().ok_or_else(|| anyhow!("--with needs a package"))?);
+                    extra.push(
+                        it.next()
+                            .cloned()
+                            .ok_or_else(|| anyhow!("--with needs a package"))?,
+                    );
                 } else if let Some(v) = a.strip_prefix("--with=") {
                     extra.push(v.to_string());
                 } else if a == "--no-default-packages" {
@@ -168,7 +175,9 @@ pub(crate) fn parse_directive(
             KernelSpec::Uv { extra, no_defaults }
         }
         "python" => {
-            let p = args.get(1).ok_or_else(|| anyhow!("%%kernel python needs a path"))?;
+            let p = args
+                .get(1)
+                .ok_or_else(|| anyhow!("%%kernel python needs a path"))?;
             KernelSpec::Python(PathBuf::from(p))
         }
         other => bail!("Unknown %%kernel target '{other}'. Use list, pixi, uv, or python."),
@@ -623,7 +632,9 @@ impl Tool for IpythonTool {
         let deadline = started + Duration::from_secs_f64(timeout_secs);
         let mut interrupted_at: Option<Instant> = None;
         let result: Option<Value> = loop {
-            let wait_until = interrupted_at.map(|t| t + INTERRUPT_GRACE).unwrap_or(deadline);
+            let wait_until = interrupted_at
+                .map(|t| t + INTERRUPT_GRACE)
+                .unwrap_or(deadline);
             let next = tokio::time::timeout_at(wait_until.into(), kernel.lines.next_line()).await;
             match next {
                 Ok(Ok(Some(line))) => {

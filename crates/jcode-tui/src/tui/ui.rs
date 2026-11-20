@@ -3074,9 +3074,12 @@ fn draw_inner(frame: &mut Frame, app: &dyn TuiState) {
     // (max 10 lines visible, scrolls if more).
     let composer_framed = chat_area.width >= 16 && chat_area.height >= 10;
     let composer_padding = if composer_framed { 4 } else { 0 };
-    let base_input_height =
-        input_ui::wrapped_input_line_count(app, chat_area.width - composer_padding, next_prompt + pending_count)
-            .min(10) as u16;
+    let base_input_height = input_ui::wrapped_input_line_count(
+        app,
+        chat_area.width - composer_padding,
+        next_prompt + pending_count,
+    )
+    .min(10) as u16;
     // Add 1 line for command suggestions, shell mode hints, or the Ctrl+Enter hint.
     let hint_line_height = input_ui::input_hint_line_height(app);
     let inline_block_height: u16 = inline_ui_height(app);

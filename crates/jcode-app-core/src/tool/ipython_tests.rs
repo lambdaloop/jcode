@@ -5,11 +5,15 @@ use jcode_tool_core::ToolExecutionMode;
 #[test]
 fn directive_parsing() {
     let cwd = std::env::temp_dir();
-    assert_eq!(parse_directive("x = 1", &cwd).unwrap(), (None, "x = 1".into()));
+    assert_eq!(
+        parse_directive("x = 1", &cwd).unwrap(),
+        (None, "x = 1".into())
+    );
     let (d, rest) = parse_directive("%%kernel\nprint(1)", &cwd).unwrap();
     assert_eq!(d, Some(KernelDirective::List));
     assert_eq!(rest, "print(1)");
-    let (d, _) = parse_directive("%%kernel uv --with scikit-learn --with \"pandas<2\"", &cwd).unwrap();
+    let (d, _) =
+        parse_directive("%%kernel uv --with scikit-learn --with \"pandas<2\"", &cwd).unwrap();
     assert_eq!(
         d,
         Some(KernelDirective::Switch(KernelSpec::Uv {
@@ -20,7 +24,9 @@ fn directive_parsing() {
     let (d, _) = parse_directive("%%kernel python /usr/bin/python3", &cwd).unwrap();
     assert_eq!(
         d,
-        Some(KernelDirective::Switch(KernelSpec::Python("/usr/bin/python3".into())))
+        Some(KernelDirective::Switch(KernelSpec::Python(
+            "/usr/bin/python3".into()
+        )))
     );
     assert!(parse_directive("%%kernel bogus", &cwd).is_err());
 }
@@ -37,12 +43,17 @@ fn pixi_env_discovery() {
     assert_eq!(find_pixi_env(&sub, "dev").as_deref(), Some(dir.path()));
     assert!(find_pixi_env(&sub, "default").is_none());
     let (d, _) = parse_directive("%%kernel pixi -e dev", &sub).unwrap();
-    assert!(matches!(d, Some(KernelDirective::Switch(KernelSpec::Pixi { env, .. })) if env == "dev"));
+    assert!(
+        matches!(d, Some(KernelDirective::Switch(KernelSpec::Pixi { env, .. })) if env == "dev")
+    );
 }
 
 #[test]
 fn module_hint_maps_package() {
-    let uv = KernelSpec::Uv { extra: vec![], no_defaults: false };
+    let uv = KernelSpec::Uv {
+        extra: vec![],
+        no_defaults: false,
+    };
     let hint = missing_module_hint("No module named 'PIL'", &uv).unwrap();
     assert!(hint.contains("%%kernel uv --with pillow"));
     assert!(missing_module_hint("other", &uv).is_none());
@@ -87,7 +98,11 @@ async fn live_kernel_persists_times_out_and_shows_images() {
     let out = run("import time\ntime.sleep(30)".into(), Some(1.0)).await;
     assert!(out.output.contains("time limit"), "{}", out.output);
     let out = run("x".into(), None).await;
-    assert!(out.output.contains("41"), "state survives interrupt: {}", out.output);
+    assert!(
+        out.output.contains("41"),
+        "state survives interrupt: {}",
+        out.output
+    );
     let out = run("import nonexistent_pkg_zz".into(), None).await;
     assert!(out.output.contains("Hint:"), "{}", out.output);
     let png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
@@ -97,10 +112,22 @@ async fn live_kernel_persists_times_out_and_shows_images() {
     )
     .await;
     assert_eq!(out.images.len(), 1, "{}", out.output);
-    let out = run("print(len(rg_files(path='.', max_files=3)) <= 3)".into(), None).await;
-    assert!(out.output.contains("True") || out.output.contains("rg"), "{}", out.output);
+    let out = run(
+        "print(len(rg_files(path='.', max_files=3)) <= 3)".into(),
+        None,
+    )
+    .await;
+    assert!(
+        out.output.contains("True") || out.output.contains("rg"),
+        "{}",
+        out.output
+    );
     let out = run("jcode_tool('nope')".into(), None).await;
-    assert!(out.output.contains("RuntimeError") || out.output.contains("Unknown"), "{}", out.output);
+    assert!(
+        out.output.contains("RuntimeError") || out.output.contains("Unknown"),
+        "{}",
+        out.output
+    );
 
     // swarm() routes through Registry::execute to the registered swarm tool
     // with the native schema, without any model call.
