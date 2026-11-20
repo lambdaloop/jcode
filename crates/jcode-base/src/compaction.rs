@@ -384,7 +384,7 @@ impl CompactionManager {
         self.compacted_count = state.compacted_count.min(total_messages);
         self.active_chars
             .reset_pending(total_messages > self.compacted_count);
-        self.restore_context_folds(state, total_messages);
+        self.restore_context_folds(state);
         // Folds alone are not a summary: an empty summary message in front of the
         // transcript would be sent to the provider on every request.
         let has_summary = !state.summary_text.is_empty() || state.openai_encrypted_content.is_some();

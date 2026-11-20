@@ -11,19 +11,17 @@ pub(super) struct FoldingState {
 }
 
 impl CompactionManager {
-    pub(super) fn restore_context_folds(&mut self, state: &crate::session::StoredCompactionState, total: usize) {
+    pub(super) fn restore_context_folds(&mut self, state: &crate::session::StoredCompactionState) {
         self.folding = FoldingState::default();
         self.folding.folds.clone_from(&state.folds);
         self.folding.folds.sort_unstable_by_key(|fold| fold.start);
         let mut next = 0;
         self.folding.folds.retain(|fold| {
-            // A provisional agent seeds before its transcript is restored, so
-            // `total` can still be zero. Judge the range only once the real
-            // length is known; `prepare_context_folds` prunes stale folds.
-            if fold.start > fold.end
-                || (total > 0 && fold.end >= total)
-                || (fold.active && fold.start < next)
-            {
+            // Do not judge the range here: a provisional agent seeds while its
+            // transcript is still a single placeholder message, so every fold
+            // looked out of range and was dropped. `prepare_context_folds`
+            // prunes folds that no longer fit the real transcript.
+            if fold.start > fold.end || (fold.active && fold.start < next) {
                 return false;
             }
             if fold.active {
