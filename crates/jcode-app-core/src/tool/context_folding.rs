@@ -63,7 +63,7 @@ impl Tool for ContextFoldingTool {
 
     fn description(&self) -> &str {
         match self.action {
-            FoldAction::Compress => "Fold a completed context range into a concise summary. Use the start and end message anchors shown in context. Preserve decisions, constraints, and facts needed for future work. Originals remain recoverable with decompress.",
+            FoldAction::Compress => "Fold a completed context range into a concise summary. Use the start and end message anchors shown in context. Preserve decisions, constraints, and facts needed for future work. Originals remain recoverable with decompress. Anchors are internal labels added by the harness. Never write them in replies.",
             FoldAction::Decompress => "Restore the original context covered by a fold ID.",
             FoldAction::Status => "Inspect live context usage and recoverable context folds.",
         }

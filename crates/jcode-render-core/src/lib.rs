@@ -19,6 +19,7 @@
 //! (`jcode-tui-markdown`); that renderer remains authoritative until this core
 //! reaches parity, after which front-ends migrate onto it.
 
+pub mod context_ref;
 pub mod markdown;
 pub mod math;
 pub mod model;
@@ -26,6 +27,7 @@ pub mod preprocess;
 pub mod reasoning;
 pub mod wrap;
 
+pub use context_ref::strip_context_refs;
 pub use markdown::{MarkdownParseOptions, parse_markdown, parse_markdown_with_options};
 pub use math::{render_display_latex, render_inline_latex};
 pub use model::{
