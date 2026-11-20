@@ -1680,7 +1680,7 @@ pub(super) async fn handle_resume_session(
     // different session into that published Arc: doing so silently changes
     // every observer's runtime beneath its still-old session ID.
     let source_agent = agent;
-    let mut detached = Agent::new(provider.fork(), registry.clone());
+    let mut detached = Agent::new(provider.fork(), registry.independent());
     if let Ok(source) = source_agent.try_lock() {
         detached.set_debug(source.is_debug());
     }

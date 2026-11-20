@@ -149,6 +149,19 @@ mod tests {
         }
     }
 
+    /// Tools capture the manager of the registry that built them, so every
+    /// registry clone serving the same session must hand them that same
+    /// manager. A fresh manager per clone left `compress` reading an empty
+    /// transcript while the agent folded its own copy.
+    #[test]
+    fn registry_clones_share_the_session_manager() {
+        let registry = super::super::Registry::empty();
+        let clone = registry.clone();
+        assert!(Arc::ptr_eq(&registry.compaction(), &clone.compaction()));
+        let independent = registry.independent();
+        assert!(!Arc::ptr_eq(&registry.compaction(), &independent.compaction()));
+    }
+
     #[tokio::test]
     async fn execution_mutates_shared_live_manager() {
         let manager = Arc::new(RwLock::new(CompactionManager::new()));

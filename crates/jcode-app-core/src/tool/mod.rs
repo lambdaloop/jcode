@@ -386,9 +386,13 @@ impl Clone for Registry {
             tools: self.tools.clone(),
             mcp_policy: Arc::clone(&self.mcp_policy),
             skills: self.skills.clone(),
-            // Each clone gets a fresh CompactionManager to prevent parallel
-            // subagents from corrupting each other's message history
-            compaction: Arc::new(RwLock::new(CompactionManager::new())),
+            // Clones serve the same session, so they must share message history.
+            // An agent tracks folds and token usage on its manager, and tools run
+            // through cloned contexts (session tools, batch, codemode). A fresh
+            // manager here silently split those two views, so `compress` saw an
+            // empty transcript. Subagents that need independent history use
+            // `Registry::independent`.
+            compaction: Arc::clone(&self.compaction),
         }
     }
 }
@@ -400,6 +404,17 @@ mod registry_touched_paths;
 mod registry_lifecycle;
 
 impl Registry {
+    /// A registry with its own [`CompactionManager`], for an agent that must
+    /// not share message history with the registry it was cloned from.
+    pub fn independent(&self) -> Self {
+        Self {
+            tools: self.tools.clone(),
+            mcp_policy: Arc::clone(&self.mcp_policy),
+            skills: Arc::clone(&self.skills),
+            compaction: Arc::new(RwLock::new(CompactionManager::new())),
+        }
+    }
+
     /// Desktop opts in through its inline response renderer capability.
     /// Keep Desktop-only UI tools out of the base map so terminal/headless
     /// registries never advertise or execute them, including through batch
