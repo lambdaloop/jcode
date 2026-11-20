@@ -28,17 +28,22 @@ const MAX_TIMEOUT_SECS: u64 = 3600;
 const STARTUP_TIMEOUT: Duration = Duration::from_secs(300);
 const INTERRUPT_GRACE: Duration = Duration::from_secs(3);
 const MAX_OUTPUT_CHARS: usize = 30_000;
+/// pi-ipython-subagents' default set, with polars in place of pandas.
+/// Playwright is the Python package only; browsers are not installed.
 pub(crate) const UV_DEFAULT_PACKAGES: &[&str] = &[
-    "ipykernel",
-    "numpy",
-    "pandas",
-    "matplotlib",
     "pillow",
+    "numpy",
+    "polars",
+    "matplotlib",
+    "playwright",
     "requests",
     "scipy",
-    "pyyaml",
     "tabulate",
+    "pyyaml",
 ];
+/// Changes the default uv package set: entries are added, `-name` drops one,
+/// a leading `=` replaces the defaults, and `none` ships only ipykernel.
+pub(crate) const KERNEL_PACKAGES_ENV: &str = "JCODE_IPYTHON_PACKAGES";
 /// Tools kernel code may not call back into.
 const FORBIDDEN_CALLBACK_TOOLS: &[&str] = &["ipython", "batch", "codemode"];
 
@@ -53,8 +58,9 @@ jcode background task (bg.list/status/logs/wait/kill); jcode_tool(name, **args) 
 Put `%%kernel` on the first line to list environments, or `%%kernel pixi [-e ENV]`, \
 `%%kernel uv [--with PKG ...] [--no-default-packages]`, `%%kernel python /path/to/python` to \
 restart in another interpreter (state is discarded); code after the directive runs in the new kernel. \
-Default env: $JCODE_IPYTHON_PYTHON, else the project's pixi env, else uv Python 3.11 with numpy, \
-pandas, matplotlib, pillow, requests, scipy, pyyaml, tabulate. Do not pip install into the kernel.";
+Default env: $JCODE_IPYTHON_PYTHON, else the project's pixi env, else uv Python 3.11 with pillow, \
+numpy, polars, matplotlib, playwright (no browsers), requests, scipy, tabulate, pyyaml. Do not pip \
+install into the kernel.";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum KernelSpec {
@@ -85,17 +91,81 @@ impl KernelSpec {
 }
 
 fn uv_packages(extra: &[String], no_defaults: bool) -> Vec<String> {
-    let mut pkgs: Vec<String> = if no_defaults {
-        vec!["ipykernel".into()]
+    let defaults = if no_defaults {
+        Vec::new()
     } else {
-        UV_DEFAULT_PACKAGES.iter().map(|s| s.to_string()).collect()
+        default_kernel_packages()
     };
-    for p in extra {
-        if !pkgs.contains(p) {
-            pkgs.push(p.clone());
+    let mut pkgs = vec!["ipykernel".to_string()];
+    merge_packages(&mut pkgs, defaults.iter().chain(extra));
+    pkgs
+}
+
+fn default_kernel_packages() -> Vec<String> {
+    resolve_kernel_packages(
+        std::env::var(KERNEL_PACKAGES_ENV)
+            .ok()
+            .as_deref()
+            .unwrap_or(""),
+    )
+}
+
+/// Port of pi-ipython-subagents' `resolveKernelPackages`.
+pub(crate) fn resolve_kernel_packages(setting: &str) -> Vec<String> {
+    let mut replace = false;
+    let mut added = Vec::new();
+    let mut dropped = Vec::new();
+    for raw in setting.split(|c: char| c == ',' || c.is_whitespace()) {
+        let mut token = raw.trim();
+        if let Some(rest) = token.strip_prefix('=') {
+            replace = true;
+            token = rest;
+        }
+        if token.is_empty() {
+            continue;
+        }
+        if token.eq_ignore_ascii_case("none") {
+            replace = true;
+        } else if let Some(name) = token.strip_prefix('-') {
+            dropped.push(requirement_name(name));
+        } else {
+            added.push(token.to_string());
         }
     }
+    let mut pkgs = Vec::new();
+    if !replace {
+        merge_packages(
+            &mut pkgs,
+            UV_DEFAULT_PACKAGES
+                .iter()
+                .map(|s| s.to_string())
+                .collect::<Vec<_>>()
+                .iter(),
+        );
+    }
+    merge_packages(&mut pkgs, added.iter());
+    pkgs.retain(|spec| !dropped.contains(&requirement_name(spec)));
     pkgs
+}
+
+/// Later specs replace earlier ones with the same package name (`pandas<2`
+/// replaces `pandas`).
+fn merge_packages<'a>(pkgs: &mut Vec<String>, specs: impl Iterator<Item = &'a String>) {
+    for spec in specs {
+        let name = requirement_name(spec);
+        match pkgs.iter().position(|p| requirement_name(p) == name) {
+            Some(index) => pkgs[index] = spec.clone(),
+            None => pkgs.push(spec.clone()),
+        }
+    }
+}
+
+fn requirement_name(spec: &str) -> String {
+    spec.split(|c: char| !(c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.'))
+        .next()
+        .unwrap_or("")
+        .to_ascii_lowercase()
+        .replace('_', "-")
 }
 
 /// Parsed `%%kernel` first-line directive.
@@ -537,8 +607,9 @@ fn list_environments(cwd: &Path, active: Option<&KernelSpec>) -> String {
         None => s.push_str("  pixi: no materialized pixi environment in this project\n"),
     }
     s.push_str(&format!(
-        "  uv: python 3.11 with {}; `%%kernel uv [--with PKG] [--no-default-packages]`\n",
-        UV_DEFAULT_PACKAGES.join(", ")
+        "  uv: python 3.11 with {}; `%%kernel uv [--with PKG] [--no-default-packages]`; \
+set {KERNEL_PACKAGES_ENV} to change the defaults\n",
+        default_kernel_packages().join(", ")
     ));
     s.push_str("  python: `%%kernel python /abs/path/to/python` (needs IPython)\n");
     s

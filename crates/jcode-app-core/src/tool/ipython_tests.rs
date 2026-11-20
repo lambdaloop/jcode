@@ -62,6 +62,39 @@ fn module_hint_maps_package() {
     assert!(uvp.contains(&"torch".to_string()));
 }
 
+#[test]
+fn kernel_package_overrides_match_pi() {
+    let defaults = resolve_kernel_packages("");
+    assert_eq!(
+        defaults,
+        [
+            "pillow",
+            "numpy",
+            "polars",
+            "matplotlib",
+            "playwright",
+            "requests",
+            "scipy",
+            "tabulate",
+            "pyyaml"
+        ]
+    );
+    let added = resolve_kernel_packages("scikit-learn,openpyxl,polars<1");
+    assert!(added.contains(&"scikit-learn".to_string()));
+    assert!(added.contains(&"polars<1".to_string()));
+    assert!(
+        !added.contains(&"polars".to_string()),
+        "polars<1 replaces polars"
+    );
+    assert!(!resolve_kernel_packages("-scipy").contains(&"scipy".to_string()));
+    assert_eq!(
+        resolve_kernel_packages("=numpy,pillow"),
+        ["numpy", "pillow"]
+    );
+    assert!(resolve_kernel_packages("none").is_empty());
+    assert_eq!(uv_packages(&[], true), ["ipykernel"]);
+}
+
 /// Live kernel test; runs only when JCODE_IPYTHON_TEST_PYTHON points at a
 /// Python with IPython installed.
 #[tokio::test]
