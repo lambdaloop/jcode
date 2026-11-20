@@ -589,6 +589,26 @@ fn truncate_query_display(query: &str, max_width: usize) -> String {
     truncate_focus_token_display(query, max_width)
 }
 
+/// One-line header for an ipython cell: first non-blank line, with a line
+/// count when the cell spans more.
+pub(crate) fn ipython_cell_header(code: &str) -> String {
+    let mut lines = code.lines().filter(|l| !l.trim().is_empty());
+    let first = lines.next().unwrap_or("").trim_end().to_string();
+    let more = lines.count();
+    if more > 0 {
+        format!("{first}  (+{more} lines)")
+    } else {
+        first
+    }
+}
+
+#[cfg(test)]
+#[test]
+fn ipython_cell_header_counts_extra_lines() {
+    assert_eq!(ipython_cell_header("\nimport os\n\nprint(1)\n"), "import os  (+1 lines)");
+    assert_eq!(ipython_cell_header("x"), "x");
+}
+
 fn truncate_command_display(command: &str, max_width: usize) -> String {
     if UnicodeWidthStr::width(command) <= max_width {
         return command.to_string();
@@ -738,6 +758,17 @@ pub(super) fn get_tool_summary_with_budget(
                     .unwrap_or(bash_max_chars)
                     .min(if has_intent { 28 } else { usize::MAX });
                 format!("$ {}", truncate_command_display(cmd, cmd_budget))
+            })
+            .unwrap_or_default(),
+        "ipython" => tool
+            .input
+            .get("code")
+            .and_then(|v| v.as_str())
+            .map(|code| {
+                let budget = max_width
+                    .map(|w| w.saturating_sub(4))
+                    .unwrap_or(bash_max_chars);
+                format!("$ {}", truncate_command_display(&ipython_cell_header(code), budget))
             })
             .unwrap_or_default(),
         "read" => {

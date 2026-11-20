@@ -6,6 +6,7 @@ use context_folding::{ContextFoldingTool, FoldAction};
 impl Registry {
     pub(super) fn insert_session_tools(&self, tools: &mut HashMap<String, Arc<dyn Tool>>) {
         Self::insert_tool(tools, "batch", batch::BatchTool::new(self.downgrade()));
+        Self::insert_tool(tools, "ipython", ipython::IpythonTool::new(self.downgrade()));
         Self::insert_tool(
             tools,
             "conversation_search",

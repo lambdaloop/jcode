@@ -376,9 +376,10 @@ pub(crate) fn render_tool_message(
         }
     }
 
-    if tools_ui::canonical_tool_name(&tc.name) == "bash"
+    if matches!(tools_ui::canonical_tool_name(&tc.name), "bash" | "ipython")
         && tools_ui::show_bash_output()
         && msg.content.trim() != "Command completed successfully (no output)"
+        && msg.content.trim() != "(no output)"
     {
         const MAX_COLLAPSED_OUTPUT_LINES: usize = 3;
         let output_lines = msg.content.lines().filter(|line| !line.trim().is_empty());

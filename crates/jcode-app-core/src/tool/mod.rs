@@ -4,6 +4,7 @@ mod agentgrep;
 pub mod ambient;
 mod apply_patch;
 mod bash;
+mod ipython;
 mod batch;
 mod bg;
 #[cfg(unix)]
