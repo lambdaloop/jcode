@@ -4,6 +4,7 @@ use command_suggestions::*;
 #[path = "ui_input_status_rendering.rs"]
 mod status_rendering;
 pub(super) use status_rendering::build_notification_spans;
+pub(super) use status_rendering::draw_composer_frame;
 pub(super) use status_rendering::draw_input;
 pub(super) use status_rendering::draw_status;
 

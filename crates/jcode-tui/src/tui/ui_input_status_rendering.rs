@@ -315,6 +315,100 @@ pub(in super::super) fn draw_status(
     frame.render_widget(Paragraph::new(line), area);
 }
 
+pub(in super::super) fn draw_composer_frame(
+    frame: &mut Frame,
+    app: &dyn TuiState,
+    data: &crate::tui::info_widget::InfoWidgetData,
+    area: Rect,
+) -> Rect {
+    use ratatui::widgets::{Block, BorderType, Borders, Padding};
+
+    let border = Style::default().fg(if app.is_processing() {
+        accent_color()
+    } else {
+        dim_color()
+    });
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(border)
+        .padding(Padding::horizontal(1));
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+
+    let elapsed = app.elapsed().map(|duration| format_elapsed(duration.as_secs_f32()));
+    let context = (!data.context_info_stale).then(|| {
+        let limit = data.context_limit.filter(|limit| *limit > 0)?;
+        let used = data.observed_context_tokens.or_else(|| {
+            data.context_info.as_ref().map(|info| info.estimated_tokens() as u64)
+        })?;
+        let percent = (used as f64 * 100.0 / limit as f64).round() as u64;
+        Some(format!("{percent}%/{}", crate::kv_cache_monitor::format_token_count(limit as u64)))
+    }).flatten();
+    let model = data.model.as_deref().unwrap_or_default();
+    let effort = data.reasoning_effort.as_deref().filter(|effort| *effort != "off");
+    let cost = data.usage_info.as_ref().map(|usage| usage.total_cost)
+        .filter(|cost| *cost > 0.0)
+        .map(|cost| format!("${cost:.3}"));
+    let right = [cost.as_deref(), Some(model), effort, context.as_deref()]
+        .into_iter()
+        .flatten()
+        .filter(|label| !label.is_empty())
+        .collect::<Vec<_>>()
+        .join(" · ");
+    let cwd = data.working_dir.as_deref().unwrap_or_default();
+    let cwd = std::path::Path::new(cwd)
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or(cwd);
+    for (y, left, right) in [
+        (area.y, elapsed.as_deref().unwrap_or_default(), right.as_str()),
+        (area.bottom() - 1, "", cwd),
+    ] {
+        frame.render_widget(
+            Paragraph::new(composer_border_labels(area.width - 2, left, right, border)),
+            Rect::new(area.x + 1, y, area.width - 2, 1),
+        );
+    }
+    inner
+}
+
+fn composer_border_labels(width: u16, left: &str, right: &str, border: Style) -> Line<'static> {
+    use jcode_tui_render::truncate_line_with_ellipsis_to_width as fit;
+
+    let label = |text: &str| Line::from(
+        text.chars().filter(|ch| !ch.is_control()).collect::<String>()
+    );
+    let width = usize::from(width);
+    let left = fit(&label(left), width.saturating_sub(6) / 3);
+    let left_width = left.width() + if left.width() > 0 { 3 } else { 0 };
+    let right = fit(&label(right), width.saturating_sub(left_width + 4));
+    let right_width = right.width() + if right.width() > 0 { 3 } else { 0 };
+    let mut spans = Vec::new();
+    if left.width() > 0 {
+        spans.push(Span::styled("─ ", border));
+        spans.extend(left.spans);
+        spans.push(Span::raw(" "));
+    }
+    spans.push(Span::styled("─".repeat(width - left_width - right_width), border));
+    if right.width() > 0 {
+        spans.push(Span::raw(" "));
+        spans.extend(right.spans);
+        spans.push(Span::styled(" ─", border));
+    }
+    Line::from(spans)
+}
+
+#[cfg(test)]
+#[test]
+fn composer_border_labels_fit_with_wide_text_and_control_characters() {
+    for width in 0..80 {
+        let line = composer_border_labels(width, "1m 30s", "資料庫\n · 12%/256K", Style::default());
+        assert_eq!(line.width(), usize::from(width));
+        assert!(line.spans.iter().all(|span| !span.content.contains('\n')));
+    }
+}
+
 pub(in super::super) fn draw_input(
     frame: &mut Frame,
     app: &dyn TuiState,

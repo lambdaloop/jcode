@@ -3072,8 +3072,11 @@ fn draw_inner(frame: &mut Frame, app: &dyn TuiState) {
 
     // Calculate input height based on the same wrapping logic used for rendering
     // (max 10 lines visible, scrolls if more).
+    let composer_framed = chat_area.width >= 16 && chat_area.height >= 10;
+    let composer_padding = if composer_framed { 4 } else { 0 };
     let base_input_height =
-        input_ui::wrapped_input_line_count(app, chat_area.width, next_prompt).min(10) as u16;
+        input_ui::wrapped_input_line_count(app, chat_area.width - composer_padding, next_prompt + pending_count)
+            .min(10) as u16;
     // Add 1 line for command suggestions, shell mode hints, or the Ctrl+Enter hint.
     let hint_line_height = input_ui::input_hint_line_height(app);
     let inline_block_height: u16 = inline_ui_height(app);
@@ -3082,7 +3085,7 @@ fn draw_inner(frame: &mut Frame, app: &dyn TuiState) {
         .len()
         .min(usize::from(chat_area.height.saturating_sub(6))) as u16;
     let inline_ui_gap_height: u16 = blocker_height.max(if inline_block_height > 0 { 1 } else { 0 });
-    let input_height = base_input_height + hint_line_height;
+    let input_height = base_input_height + hint_line_height + if composer_framed { 2 } else { 0 };
 
     if let Some(ref mut capture) = debug_capture {
         capture.render_order.push("prepare_messages".to_string());
@@ -3569,11 +3572,16 @@ fn draw_inner(frame: &mut Frame, app: &dyn TuiState) {
         frame.render_widget(Paragraph::new(blocker_lines), chunks[6]);
     }
 
+    let composer_area = if composer_framed && chunks[7].height >= 3 {
+        input_ui::draw_composer_frame(frame, app, &widget_data, chunks[7])
+    } else {
+        chunks[7]
+    };
     let _input_cursor = input_ui::draw_input(
         frame,
         app,
-        chunks[7],
-        user_count + pending_count + 1,
+        composer_area,
+        next_prompt + pending_count,
         &mut debug_capture,
     );
 
