@@ -12,7 +12,7 @@ impl Registry {
             conversation_search::ConversationSearchTool::new(self.compaction.clone()),
         );
         for action in [FoldAction::Compress, FoldAction::Decompress, FoldAction::Status] {
-            let tool = ContextFoldingTool::new(self.compaction.clone(), action);
+            let tool = ContextFoldingTool::new(self.downgrade(), action);
             let name = tool.name().to_owned();
             Self::insert_tool(tools, &name, tool);
         }

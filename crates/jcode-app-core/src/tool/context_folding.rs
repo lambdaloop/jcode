@@ -1,6 +1,6 @@
 //! Model-driven folding tools operate only on the live session manager.
 
-use super::{Tool, ToolContext, ToolOutput};
+use super::{Tool, ToolContext, ToolOutput, WeakRegistry};
 use crate::compaction::CompactionManager;
 use crate::config::CompactionMode;
 use anyhow::Result;
@@ -18,13 +18,23 @@ pub(super) enum FoldAction {
 }
 
 pub(super) struct ContextFoldingTool {
-    compaction: Arc<RwLock<CompactionManager>>,
+    registry: WeakRegistry,
     action: FoldAction,
 }
 
 impl ContextFoldingTool {
-    pub(super) fn new(compaction: Arc<RwLock<CompactionManager>>, action: FoldAction) -> Self {
-        Self { compaction, action }
+    pub(super) fn new(registry: WeakRegistry, action: FoldAction) -> Self {
+        Self { registry, action }
+    }
+
+    /// Resolve the manager of the registry this call runs in.
+    ///
+    /// Holding the manager directly pinned whichever registry built the tools,
+    /// while the agent tracked folds on its own clone: `compress` then folded an
+    /// empty transcript. Tool contexts are registry clones of the agent, so
+    /// resolving here always yields the manager that holds the session history.
+    fn manager(&self) -> Option<Arc<RwLock<CompactionManager>>> {
+        self.registry.upgrade().map(|registry| registry.compaction())
     }
 }
 
@@ -59,9 +69,10 @@ impl Tool for ContextFoldingTool {
     }
 
     fn model_visible(&self) -> bool {
-        self.compaction
+        self.manager()
+            .is_some_and(|manager| manager
             .try_read()
-            .is_ok_and(|manager| manager.mode() == CompactionMode::ModelDriven)
+            .is_ok_and(|manager| manager.mode() == CompactionMode::ModelDriven))
     }
 
     fn parameters_schema(&self) -> Value {
@@ -87,21 +98,24 @@ impl Tool for ContextFoldingTool {
     }
 
     async fn execute(&self, input: Value, _ctx: ToolContext) -> Result<ToolOutput> {
+        let manager = self
+            .manager()
+            .ok_or_else(|| anyhow::anyhow!("This tool is no longer attached to a live session"))?;
         let output = match self.action {
             FoldAction::Compress => {
                 let args: CompressInput = serde_json::from_value(input)?;
-                let fold_id = self.compaction.write().await
+                let fold_id = manager.write().await
                     .compress_context(&args.start, &args.end, args.summary)
                     .map_err(anyhow::Error::msg)?;
                 json!({"fold_id": fold_id})
             }
             FoldAction::Decompress => {
                 let args: DecompressInput = serde_json::from_value(input)?;
-                self.compaction.write().await.decompress_context(args.fold_id)
+                manager.write().await.decompress_context(args.fold_id)
                     .map_err(anyhow::Error::msg)?;
                 json!({"fold_id": args.fold_id, "decompressed": true})
             }
-            FoldAction::Status => self.compaction.read().await.context_fold_status(),
+            FoldAction::Status => manager.read().await.context_fold_status(),
         };
         Ok(ToolOutput::new(output.to_string()))
     }
@@ -110,16 +124,32 @@ impl Tool for ContextFoldingTool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::tool::Registry;
 
-    #[test]
-    fn schemas_expose_required_arguments() {
-        let manager = Arc::new(RwLock::new(CompactionManager::new()));
-        for (action, name, required) in [
-            (FoldAction::Compress, "compress", json!(["intent", "start", "end", "summary"])),
-            (FoldAction::Decompress, "decompress", json!(["intent", "fold_id"])),
-            (FoldAction::Status, "context_status", json!(["intent"])),
+    /// A registry wired like a live session: session tools registered against
+    /// its own manager, so resolving through the registry and through a clone
+    /// of it agree.
+    async fn session_registry() -> Registry {
+        let registry = Registry::empty();
+        let mut tools = std::collections::HashMap::new();
+        registry.insert_session_tools(&mut tools);
+        *registry.tools.write().await = tools;
+        registry
+    }
+
+    async fn registered(registry: &Registry, name: &str) -> Arc<dyn Tool> {
+        registry.tools.read().await.get(name).cloned().expect("session tool registered")
+    }
+
+    #[tokio::test]
+    async fn schemas_expose_required_arguments() {
+        let registry = session_registry().await;
+        for (name, required) in [
+            ("compress", json!(["intent", "start", "end", "summary"])),
+            ("decompress", json!(["intent", "fold_id"])),
+            ("context_status", json!(["intent"])),
         ] {
-            let tool = ContextFoldingTool::new(manager.clone(), action);
+            let tool = registered(&registry, name).await;
             assert_eq!(tool.name(), name);
             let schema = tool.parameters_schema();
             assert_eq!(schema["required"], required);
@@ -131,8 +161,9 @@ mod tests {
 
     #[tokio::test]
     async fn visibility_is_nonblocking_when_manager_is_locked() {
-        let manager = Arc::new(RwLock::new(CompactionManager::new()));
-        let tool = ContextFoldingTool::new(manager.clone(), FoldAction::Status);
+        let registry = session_registry().await;
+        let manager = registry.compaction();
+        let tool = registered(&registry, "context_status").await;
         let _guard = manager.write().await;
         assert!(!tool.model_visible());
     }
@@ -149,22 +180,21 @@ mod tests {
         }
     }
 
-    /// Tools capture the manager of the registry that built them, so every
-    /// registry clone serving the same session must hand them that same
-    /// manager. A fresh manager per clone left `compress` reading an empty
-    /// transcript while the agent folded its own copy.
+    /// Registry clones serve one session and must share its manager, otherwise
+    /// the agent folds its own copy while every tool context sees an empty one.
     #[test]
     fn registry_clones_share_the_session_manager() {
-        let registry = super::super::Registry::empty();
-        let clone = registry.clone();
-        assert!(Arc::ptr_eq(&registry.compaction(), &clone.compaction()));
-        let independent = registry.independent();
-        assert!(!Arc::ptr_eq(&registry.compaction(), &independent.compaction()));
+        let registry = Registry::empty();
+        assert!(Arc::ptr_eq(&registry.compaction(), &registry.clone().compaction()));
+        assert!(!Arc::ptr_eq(&registry.compaction(), &registry.independent().compaction()));
     }
 
+    /// The tool executes inside a registry clone, as it does on the server, and
+    /// must still fold the transcript the agent tracks.
     #[tokio::test]
-    async fn execution_mutates_shared_live_manager() {
-        let manager = Arc::new(RwLock::new(CompactionManager::new()));
+    async fn execution_folds_the_manager_of_its_executing_registry() {
+        let registry = session_registry().await;
+        let manager = registry.compaction();
         {
             let mut guard = manager.write().await;
             guard.set_mode(CompactionMode::ModelDriven);
@@ -175,16 +205,16 @@ mod tests {
                 crate::message::Message::assistant_text("working"),
             ]);
         }
-        let compress = ContextFoldingTool::new(manager.clone(), FoldAction::Compress);
+        let compress = ContextFoldingTool::new(registry.clone().downgrade(), FoldAction::Compress);
         assert!(compress.model_visible());
         let result = compress.execute(json!({"intent":"save space", "start":"m00001", "end":"m00001", "summary":"Old work completed."}), context()).await.unwrap();
         let fold_id = serde_json::from_str::<Value>(&result.output).unwrap()["fold_id"].as_u64().unwrap();
-        let status = ContextFoldingTool::new(manager.clone(), FoldAction::Status);
+        let status = ContextFoldingTool::new(registry.clone().downgrade(), FoldAction::Status);
         let result = status.execute(json!({"intent":"inspect context"}), context()).await.unwrap();
-        let value: Value = serde_json::from_str(&result.output).unwrap();
+        let value: Value = serde_json::from_str::<Value>(&result.output).unwrap();
         assert_eq!(value["folds"][0]["id"], fold_id);
         assert_eq!(value["folds"][0]["active"], true);
-        let decompress = ContextFoldingTool::new(manager.clone(), FoldAction::Decompress);
+        let decompress = ContextFoldingTool::new(registry.downgrade(), FoldAction::Decompress);
         decompress.execute(json!({"intent":"restore", "fold_id":fold_id}), context()).await.unwrap();
         assert_eq!(manager.read().await.context_fold_status()["folds"][0]["active"], false);
         assert!(decompress.execute(json!({"fold_id":fold_id}), context()).await.is_err());
