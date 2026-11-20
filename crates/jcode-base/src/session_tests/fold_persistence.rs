@@ -72,12 +72,26 @@ fn folds_persist_through_snapshot_and_journal() -> anyhow::Result<()> {
     let _restore = RestoreHome(std::env::var_os("JCODE_HOME"));
     crate::env::set_var("JCODE_HOME", home.path());
     let mut session = session();
+    Arc::make_mut(session.compaction.as_mut().unwrap()).folds[0].active = false;
+    session.add_message(Role::User, vec![ContentBlock::Text {
+        text: "x".repeat(1024 * 1024), cache_control: None,
+    }]);
     session.save()?;
     assert_eq!(Session::load(&session.id)?.compaction, session.compaction);
-    Arc::make_mut(session.compaction.as_mut().unwrap()).folds[0].active = false;
+    Arc::make_mut(session.compaction.as_mut().unwrap()).folds[0].active = true;
     session.add_message(Role::User, vec![]);
     session.save()?;
-    assert_eq!(Session::load(&session.id)?.compaction, session.compaction);
+    let mut resumed = Session::load(&session.id)?;
+    assert_eq!(resumed.compaction, session.compaction);
+    // Reload interrupts the reload tool itself, so recovery inserts a missing
+    // tool result after the folded range and checkpoints the repaired history.
+    let mut repaired = session.messages[2].clone();
+    repaired.id = "message_fold_repaired_tool_output".into();
+    resumed.insert_message(3, repaired);
+    resumed.save()?;
+    let reloaded = Session::load(&session.id)?;
+    assert_eq!(reloaded.compaction, session.compaction);
+    assert_eq!(reloaded.messages[3].id, "message_fold_repaired_tool_output");
     Ok(())
 }
 
@@ -92,11 +106,15 @@ fn fold_summaries_are_redacted_without_mutating_shared_source() {
 }
 
 #[test]
-fn transcript_insert_and_replace_discard_all_folds_without_mutating_clones() {
+fn transcript_edits_preserve_only_unaffected_fold_ranges() {
     let original = session();
     let mut inserted = original.clone();
     inserted.insert_message(1, original.messages[0].clone());
     assert!(inserted.compaction.as_ref().unwrap().folds.is_empty());
+    let mut before = original.clone();
+    before.insert_message(0, original.messages[2].clone());
+    let shifted = &before.compaction.as_ref().unwrap().folds[0];
+    assert_eq!((shifted.start, shifted.end), (1, 2));
     let mut replaced = original.clone();
     replaced.replace_messages(original.messages.clone());
     assert!(replaced.compaction.as_ref().unwrap().folds.is_empty());

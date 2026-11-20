@@ -72,10 +72,6 @@ storage or guarantee that every future request will fit the model window.
 If emergency compaction moves past a fold, use `conversation_search` to
 recover excerpts from the transcript rather than reopening the whole span.
 
-## Known limitation: folds do not survive a restart yet
-
-`compress` and `decompress` work in a live session, and the fold list reaches
-the session journal. Restoring those folds when a new process loads the session
-still comes back empty, so after a restart the range is unfolded again. Until
-that load path is fixed, treat folds as session-local: re-run `compress` after
-a restart if the context window matters again.
+Folds are saved with the session. If recovery inserts a missing tool result,
+folds outside the insertion are preserved. An insertion inside a folded range
+invalidates that fold so the model can see the repaired transcript.
