@@ -26,6 +26,7 @@ use std::sync::Arc;
 use std::time::Instant;
 use tokio::task::JoinHandle;
 mod folding;
+pub mod live_session;
 
 pub use jcode_compaction_core::{
     CHARS_PER_TOKEN, COMPACTION_THRESHOLD, CRITICAL_THRESHOLD, CompactionAction, CompactionEvent,

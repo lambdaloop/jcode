@@ -39,6 +39,7 @@ impl Agent {
                     manager.ensure_context_fits(all_messages, self.provider.clone());
                 }
                 let messages = manager.messages_for_api_with(all_messages);
+                crate::compaction::live_session::publish(&self.session.id, &compaction);
                 let event = manager.take_compaction_event();
                 if event.is_some() || discarded {
                     self.sync_session_compaction_state_from_manager(&manager);

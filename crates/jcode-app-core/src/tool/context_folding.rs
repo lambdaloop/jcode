@@ -29,12 +29,13 @@ impl ContextFoldingTool {
 
     /// Resolve the manager of the registry this call runs in.
     ///
-    /// Holding the manager directly pinned whichever registry built the tools,
-    /// while the agent tracked folds on its own clone: `compress` then folded an
-    /// empty transcript. Tool contexts are registry clones of the agent, so
-    /// resolving here always yields the manager that holds the session history.
-    fn manager(&self) -> Option<Arc<RwLock<CompactionManager>>> {
-        self.registry.upgrade().map(|registry| registry.compaction())
+    /// The registry a tool executes on is not always the one the agent tracks:
+    /// failover rebuilds an agent on a fresh registry, and per-client registries
+    /// keep their own managers. Agents publish theirs per session, so prefer
+    /// that and fall back to the executing registry.
+    fn manager(&self, session_id: &str) -> Option<Arc<RwLock<CompactionManager>>> {
+        crate::compaction::live_session::resolve(session_id)
+            .or_else(|| self.registry.upgrade().map(|registry| registry.compaction()))
     }
 }
 
@@ -69,10 +70,11 @@ impl Tool for ContextFoldingTool {
     }
 
     fn model_visible(&self) -> bool {
-        self.manager()
-            .is_some_and(|manager| manager
-            .try_read()
-            .is_ok_and(|manager| manager.mode() == CompactionMode::ModelDriven))
+        self.registry
+            .upgrade()
+            .is_some_and(|registry| registry.compaction()
+                .try_read()
+                .is_ok_and(|manager| manager.mode() == CompactionMode::ModelDriven))
     }
 
     fn parameters_schema(&self) -> Value {
@@ -97,9 +99,8 @@ impl Tool for ContextFoldingTool {
         schema
     }
 
-    async fn execute(&self, input: Value, _ctx: ToolContext) -> Result<ToolOutput> {
-        let manager = self
-            .manager()
+    async fn execute(&self, input: Value, ctx: ToolContext) -> Result<ToolOutput> {
+        let manager = self.manager(&ctx.session_id)
             .ok_or_else(|| anyhow::anyhow!("This tool is no longer attached to a live session"))?;
         let output = match self.action {
             FoldAction::Compress => {
@@ -220,6 +221,30 @@ mod tests {
         assert!(decompress.execute(json!({"fold_id":fold_id}), context()).await.is_err());
         manager.write().await.set_mode(CompactionMode::Reactive);
         assert!(!compress.model_visible());
+    }
+
+    /// A tool can execute on a registry that never tracked the transcript, so the
+    /// manager the agent published for its session wins over the registry's.
+    #[tokio::test]
+    async fn execution_prefers_the_published_session_manager() {
+        let registry = session_registry().await;
+        let session = "fold-tool-published-manager-test";
+        let live = registry.compaction();
+        {
+            let mut guard = live.write().await;
+            guard.set_mode(CompactionMode::ModelDriven);
+            guard.prepare_context_folds(&[
+                crate::message::Message::user("first"),
+                crate::message::Message::assistant_text("second"),
+            ]);
+        }
+        crate::compaction::live_session::publish(session, &live);
+        let status = ContextFoldingTool::new(registry.downgrade(), FoldAction::Status);
+        let mut ctx = context();
+        ctx.session_id = session.to_string();
+        let result = status.execute(json!({"intent":"inspect context"}), ctx).await.unwrap();
+        let value: Value = serde_json::from_str(&result.output).unwrap();
+        assert_eq!(value["message_count"], 2);
     }
 
     #[test]
