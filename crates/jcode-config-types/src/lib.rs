@@ -20,37 +20,8 @@ pub use keybindings::{
     keybinding_default, keybinding_defaults_report, validate_keybinding_defaults,
 };
 
-/// Compaction mode
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
-#[serde(rename_all = "lowercase")]
-pub enum CompactionMode {
-    /// Compact when context hits a fixed threshold (default)
-    #[default]
-    Reactive,
-    /// Compact early based on predicted token growth rate
-    Proactive,
-    /// Compact based on semantic topic shifts and relevance scoring
-    Semantic,
-}
-
-impl CompactionMode {
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            Self::Reactive => "reactive",
-            Self::Proactive => "proactive",
-            Self::Semantic => "semantic",
-        }
-    }
-
-    pub fn parse(input: &str) -> Option<Self> {
-        match input.trim().to_ascii_lowercase().as_str() {
-            "reactive" => Some(Self::Reactive),
-            "proactive" => Some(Self::Proactive),
-            "semantic" => Some(Self::Semantic),
-            _ => None,
-        }
-    }
-}
+mod compaction_mode;
+pub use compaction_mode::CompactionMode;
 
 /// Session picker Enter action: "current-terminal" (default) or "new-terminal".
 /// Ctrl+Enter performs the alternate action.
@@ -291,7 +262,7 @@ impl ReasoningDisplayMode {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct CompactionConfig {
-    /// Compaction mode: reactive (default), proactive, or semantic
+    /// Compaction mode: reactive (default), proactive, semantic, or model_driven
     pub mode: CompactionMode,
 
     /// [reactive] Context fraction that starts background compaction.

@@ -882,13 +882,14 @@ impl App {
                 ),
                 ("/compact mode reactive".into(), "Use reactive compaction"),
                 ("/compact mode proactive".into(), "Use proactive compaction"),
+                ("/compact mode model_driven".into(), "Use model-driven folding"),
+                ("/compact mode fold".into(), "Alias for model_driven"),
                 ("/compact mode semantic".into(), "Use semantic compaction"),
             ];
             return self.rank_suggestions(input, suggestions);
         }
-
         if prefix.starts_with("/compact mode ") {
-            let modes = ["reactive", "proactive", "semantic"];
+            let modes = ["reactive", "proactive", "semantic", "model_driven", "fold"];
             let mut suggestions: Vec<(String, &'static str)> = vec![(
                 "/compact mode status".into(),
                 "Show the current compaction mode",
@@ -900,7 +901,6 @@ impl App {
             );
             return self.rank_suggestions(input, suggestions);
         }
-
         if prefix.starts_with("/cache ") {
             let suggestions = vec![
                 ("/cache stats".into(), "Show KV cache stats"),

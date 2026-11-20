@@ -1547,7 +1547,7 @@ pub(in crate::tui::app) async fn submit_prepared_remote_enter_input(
                 .clone()
                 .unwrap_or(crate::config::CompactionMode::Reactive);
             app.push_display_message(DisplayMessage::system(format!(
-                        "Compaction mode: {}\nAvailable: reactive, proactive, semantic\nUse /compact mode <mode> to change it for this session.",
+                        "Compaction mode: {}\nAvailable: reactive, proactive, semantic, model_driven (alias: fold)\nUse /compact mode <mode> to change it for this session.",
                         mode.as_str()
                     )));
             return Ok(());
@@ -1557,7 +1557,7 @@ pub(in crate::tui::app) async fn submit_prepared_remote_enter_input(
             let mode_str = mode_str.trim();
             let Some(mode) = crate::config::CompactionMode::parse(mode_str) else {
                 app.push_display_message(DisplayMessage::error(
-                    "Usage: /compact mode <reactive|proactive|semantic>".to_string(),
+                    "Usage: /compact mode <reactive|proactive|semantic|model_driven|fold>".to_string(),
                 ));
                 return Ok(());
             };

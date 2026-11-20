@@ -3381,7 +3381,7 @@ pub(super) fn handle_config_command(app: &mut App, trimmed: &str) -> bool {
             .map(|manager| manager.mode())
             .unwrap_or_default();
         app.push_display_message(DisplayMessage::system(format!(
-            "Compaction mode: {}\nAvailable: reactive, proactive, semantic\nUse /compact mode <mode> to change it for this session.",
+            "Compaction mode: {}\nAvailable: reactive, proactive, semantic, model_driven (alias: fold)\nUse /compact mode <mode> to change it for this session.",
             mode.as_str()
         )));
         return true;
@@ -3391,7 +3391,7 @@ pub(super) fn handle_config_command(app: &mut App, trimmed: &str) -> bool {
         let mode_str = mode_str.trim();
         let Some(mode) = crate::config::CompactionMode::parse(mode_str) else {
             app.push_display_message(DisplayMessage::error(
-                "Usage: /compact mode <reactive|proactive|semantic>".to_string(),
+                "Usage: /compact mode <reactive|proactive|semantic|model_driven|fold>".to_string(),
             ));
             return true;
         };
