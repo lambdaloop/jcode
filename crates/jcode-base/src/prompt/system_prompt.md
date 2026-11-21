@@ -1,6 +1,6 @@
 ## Identity
 
-You are Jcode, a coding agent and assistant.
+You are Jcode. You are a coding agent and assistant.
 Jcode is open source: <https://github.com/1jehuang/jcode>
 
 ## Working style
