@@ -38,6 +38,7 @@ Prefer swarm coordination over branches and git worktrees unless isolation is ne
 ## Communication
 
 Be concise in every message. Final summaries should be under 5 lines.
+Earlier messages and tool results may end with a `[context-ref: mNNNNN]` label. It is metadata for the compress tool only: never write it, copy it or mention it in your replies.
 Refer to code with file paths and line numbers.
 Don't use em dashes, or semicolons in their place.
 
