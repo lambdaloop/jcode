@@ -64,7 +64,8 @@ pub use jcode_provider_core::{
     CHEAPNESS_REFERENCE_OUTPUT_TOKENS, CredentialMode, DEFAULT_CONTEXT_LIMIT, EventStream,
     JCODE_USER_AGENT, ModelCapabilities, ModelCatalogRefreshSummary, ModelRoute,
     ModelRouteApiMethod, NativeCompactionResult, NativeToolResult, NativeToolResultSender,
-    PremiumMode, Provider, RouteBillingKind, RouteCheapnessEstimate, RouteCostConfidence,
+    PremiumMode, Provider, ReasoningReplay, RouteBillingKind, RouteCheapnessEstimate,
+    RouteCostConfidence,
     RouteCostSource, RouteSelection, RuntimeKey, dedupe_model_routes,
     explicit_model_provider_prefix, fresh_transport_client, grok_build_model_spec,
     inferred_reasoning_efforts, model_name_for_provider, normalize_copilot_model_name,
@@ -173,17 +174,28 @@ pub fn request_compression_mode() -> jcode_provider_core::request_compression::C
 /// provider context reconstruction.
 ///
 /// Display is controlled separately by `display.show_thinking`. Persist only
-/// when a provider request builder can safely send the stored block back in
-/// the provider-native shape. Anthropic is included only because we preserve
-/// its thinking signatures in `ContentBlock::AnthropicThinking`.
-pub fn stores_reasoning_content_for_context(provider_name: &str) -> bool {
-    if !crate::config::config().provider.preserve_reasoning_context {
-        return false;
+/// when the active provider's wire format can safely take the stored block back
+/// (see [`Provider::reasoning_replay`]); Anthropic qualifies because we
+/// preserve its thinking signatures in `ContentBlock::AnthropicThinking`.
+pub fn stores_reasoning_content_for_context(replay: ReasoningReplay) -> bool {
+    crate::config::config().provider.preserve_reasoning_context && replay.stores_context()
+}
+
+/// Replay format implied by a route when its runtime is not loaded yet.
+///
+/// Only routes whose wire format is unambiguous get a kind here; anything else
+/// falls back to no replay so no provider receives blocks it cannot parse.
+fn active_fallback_reasoning_replay(active: ActiveProvider) -> ReasoningReplay {
+    match active {
+        ActiveProvider::Claude => ReasoningReplay::AnthropicThinking,
+        ActiveProvider::OpenAI => ReasoningReplay::OpenAiReasoning,
+        ActiveProvider::OpenRouter => ReasoningReplay::ReadableText,
+        ActiveProvider::Copilot
+        | ActiveProvider::Antigravity
+        | ActiveProvider::Gemini
+        | ActiveProvider::Cursor
+        | ActiveProvider::Bedrock => ReasoningReplay::None,
     }
-    matches!(
-        provider_name.to_ascii_lowercase().as_str(),
-        "openrouter" | "anthropic" | "openai"
-    )
 }
 
 #[path = "direct_profile_routes.rs"]
@@ -1778,6 +1790,30 @@ impl Provider for MultiProvider {
             ActiveProvider::Bedrock => "Bedrock",
             ActiveProvider::OpenRouter => "OpenRouter",
         }
+    }
+
+    fn reasoning_replay(&self) -> ReasoningReplay {
+        // The orchestrator's own name ("Claude", "OpenRouter", ...) is a label,
+        // not a wire format: ask the runtime that will actually build the
+        // request. Fall back to the active route when that runtime is not
+        // loaded yet (for example before login), so a Claude turn is still
+        // stored in the Anthropic shape instead of being dropped.
+        let active = self.active_provider();
+        let runtime: Option<Arc<dyn Provider>> = match active {
+            ActiveProvider::Claude => self.anthropic_provider(),
+            ActiveProvider::OpenAI => self.openai_provider(),
+            ActiveProvider::Copilot => self.copilot_provider(),
+            ActiveProvider::Antigravity => self.antigravity_provider(),
+            ActiveProvider::Gemini => self.gemini_provider(),
+            ActiveProvider::Cursor => self.cursor_provider(),
+            ActiveProvider::Bedrock => self
+                .bedrock_provider()
+                .map(|provider| provider as Arc<dyn Provider>),
+            ActiveProvider::OpenRouter => self.active_openrouter_execution_provider(),
+        };
+        runtime
+            .map(|provider| provider.reasoning_replay())
+            .unwrap_or_else(|| active_fallback_reasoning_replay(active))
     }
 
     fn display_name(&self) -> String {

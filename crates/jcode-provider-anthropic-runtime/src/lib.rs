@@ -1737,6 +1737,10 @@ impl Provider for AnthropicProvider {
         "anthropic"
     }
 
+    fn reasoning_replay(&self) -> jcode_provider_core::ReasoningReplay {
+        jcode_provider_core::ReasoningReplay::AnthropicThinking
+    }
+
     fn context_window(&self) -> usize {
         context_window::resolve(&self.model())
     }

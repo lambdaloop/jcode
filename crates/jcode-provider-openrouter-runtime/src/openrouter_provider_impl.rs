@@ -341,6 +341,10 @@ impl Provider for OpenRouterProvider {
         "openrouter"
     }
 
+    fn reasoning_replay(&self) -> jcode_provider_core::ReasoningReplay {
+        jcode_provider_core::ReasoningReplay::ReadableText
+    }
+
     fn display_name(&self) -> String {
         self.runtime_display_name()
     }

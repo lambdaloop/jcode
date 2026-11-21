@@ -860,6 +860,10 @@ impl Provider for OpenAIProvider {
         "openai"
     }
 
+    fn reasoning_replay(&self) -> jcode_provider_core::ReasoningReplay {
+        jcode_provider_core::ReasoningReplay::OpenAiReasoning
+    }
+
     fn on_auth_changed(&self) {
         self.reload_credentials_now();
     }

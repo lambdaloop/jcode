@@ -11,6 +11,7 @@ pub mod models;
 pub mod openai_schema;
 pub mod pricing;
 pub mod reasoning;
+pub mod reasoning_replay;
 pub mod request_compression;
 pub mod retry_after;
 pub mod selection;
@@ -19,6 +20,7 @@ pub mod transport;
 pub mod ws_deflate;
 
 pub use jcode_usage_types::{ModelUsage, compare_model_usage};
+pub use reasoning_replay::ReasoningReplay;
 pub use transport::is_transient_transport_error;
 
 pub use anthropic::{
@@ -143,6 +145,18 @@ pub trait Provider: Send + Sync {
     /// for their own enrichment revisions. Arbitrary providers opt out by default.
     fn catalog_sharing_identity(&self) -> Option<String> {
         None
+    }
+
+    /// How this provider wants the model's reasoning replayed on later turns.
+    ///
+    /// This is a wire-format capability, deliberately not a function of
+    /// [`Provider::name`]: provider orchestrators keep a stable human-facing
+    /// name ("Claude") while the underlying runtime speaks the Anthropic wire
+    /// format, so name matching silently disables replay. Defaults to
+    /// [`ReasoningReplay::None`]: a provider that can take reasoning back must
+    /// say so.
+    fn reasoning_replay(&self) -> ReasoningReplay {
+        ReasoningReplay::None
     }
 
     /// Get the model identifier being used.

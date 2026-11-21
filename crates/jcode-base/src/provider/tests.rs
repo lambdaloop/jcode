@@ -1,5 +1,6 @@
 mod catalog_discovery;
 use super::*;
+use crate::message::ContentBlock;
 mod catalog_memo;
 mod saved_account_selection;
 mod session_binding;
@@ -856,6 +857,16 @@ impl Provider for StubExternalRuntime {
     fn name(&self) -> &'static str {
         self.name
     }
+    /// Mirror the real runtimes' wire formats so orchestrator tests exercise
+    /// the same replay decisions the binary makes.
+    fn reasoning_replay(&self) -> ReasoningReplay {
+        match self.provider_label.to_ascii_lowercase().as_str() {
+            "anthropic" => ReasoningReplay::AnthropicThinking,
+            "openai" => ReasoningReplay::OpenAiReasoning,
+            "openrouter" => ReasoningReplay::ReadableText,
+            _ => ReasoningReplay::None,
+        }
+    }
     fn model(&self) -> String {
         self.model
             .read()
@@ -1273,4 +1284,150 @@ fn stale_credential_route_fallback_follows_runtime_pin_or_drops_to_auto() {
         assert!(stale_credential_route_fallback("claude-sonnet-5").is_none());
         assert!(stale_credential_route_fallback("openrouter:z-ai/glm-5.2@Novita").is_none());
     });
+}
+
+/// A provider that only differs from another by its advertised name, used to
+/// prove replay is decided by wire format rather than by name matching.
+struct NamedReplayProvider {
+    name: &'static str,
+    replay: ReasoningReplay,
+}
+
+#[async_trait::async_trait]
+impl Provider for NamedReplayProvider {
+    async fn complete(
+        &self,
+        _messages: &[Message],
+        _tools: &[ToolDefinition],
+        _system: &str,
+        _resume_session_id: Option<&str>,
+    ) -> anyhow::Result<EventStream> {
+        unreachable!("replay capability checks must not start a completion")
+    }
+
+    fn name(&self) -> &'static str {
+        self.name
+    }
+
+    fn reasoning_replay(&self) -> ReasoningReplay {
+        self.replay
+    }
+
+    fn fork(&self) -> Arc<dyn Provider> {
+        Arc::new(Self {
+            name: self.name,
+            replay: self.replay,
+        })
+    }
+}
+
+fn multi_provider_with_claude_active() -> MultiProvider {
+    let mut provider = test_multi_provider_with_openai();
+    provider.anthropic = RwLock::new(Some(test_anthropic_runtime() as Arc<dyn Provider>));
+    provider.active = RwLock::new(ActiveProvider::Claude);
+    provider
+}
+
+#[test]
+fn claude_orchestrator_declares_anthropic_replay_despite_its_name() {
+    with_clean_provider_test_env(|| {
+        let rt = enter_test_runtime();
+        let _runtime_guard = rt.enter();
+        let provider = multi_provider_with_claude_active();
+
+        // The orchestrator is named "Claude"; the Anthropic wire format is what
+        // actually decides whether signed thinking can go back to the API.
+        assert_eq!(provider.name(), "Claude");
+        assert_eq!(
+            provider.reasoning_replay(),
+            ReasoningReplay::AnthropicThinking
+        );
+        assert_eq!(
+            provider.reasoning_replay(),
+            test_anthropic_runtime().reasoning_replay(),
+            "the orchestrator must report the same replay format as the runtime it delegates to"
+        );
+    });
+}
+
+#[test]
+fn claude_orchestrator_stores_and_replays_signed_thinking() {
+    with_clean_provider_test_env(|| {
+        let rt = enter_test_runtime();
+        let _runtime_guard = rt.enter();
+        let provider = multi_provider_with_claude_active();
+        assert!(
+            crate::config::config().provider.preserve_reasoning_context,
+            "config default under test must allow replay for this assertion"
+        );
+
+        // 1. The turn loop decides persistence from the provider's capability.
+        let store_reasoning_content =
+            stores_reasoning_content_for_context(provider.reasoning_replay());
+        assert!(
+            store_reasoning_content,
+            "a Claude turn must persist signed thinking for replay"
+        );
+
+        // 2. The stored assistant turn carries the signed thinking block first,
+        //    ahead of the text and tool calls of the same turn.
+        let mut blocks = vec![
+            ContentBlock::Text {
+                text: "Running the read tool.".to_string(),
+                cache_control: None,
+            },
+            ContentBlock::ToolUse {
+                id: "toolu_01".to_string(),
+                name: "read".to_string(),
+                input: serde_json::json!({ "path": "src/lib.rs" }),
+                thought_signature: None,
+            },
+        ];
+        crate::message::push_reasoning_blocks(
+            &mut blocks,
+            provider.reasoning_replay(),
+            "I should read the file before editing.",
+            Some("sig-abc"),
+            store_reasoning_content,
+        );
+
+        assert_eq!(blocks.len(), 3, "one thinking block, no duplicate trace");
+        match &blocks[0] {
+            ContentBlock::AnthropicThinking {
+                thinking,
+                signature,
+            } => {
+                assert_eq!(thinking, "I should read the file before editing.");
+                assert_eq!(signature, "sig-abc");
+            }
+            other => panic!("expected replayed AnthropicThinking first, got {other:?}"),
+        }
+        assert!(matches!(blocks[1], ContentBlock::Text { .. }));
+        assert!(matches!(blocks[2], ContentBlock::ToolUse { .. }));
+    });
+}
+
+#[test]
+fn replay_capability_follows_wire_format_not_name() {
+    // Future provider aliases keep working, and a provider that merely calls
+    // itself "anthropic" cannot get replay for free.
+    let aliases = [
+        ("Claude", ReasoningReplay::AnthropicThinking, true),
+        ("anthropic", ReasoningReplay::AnthropicThinking, true),
+        ("claude-code", ReasoningReplay::AnthropicThinking, true),
+        ("AnthropicProxy", ReasoningReplay::AnthropicThinking, true),
+        ("anthropic", ReasoningReplay::None, false),
+        ("Claude", ReasoningReplay::None, false),
+        ("nvidia-nim", ReasoningReplay::ReadableText, true),
+        ("gemini", ReasoningReplay::None, false),
+    ];
+    for (name, replay, expected) in aliases {
+        let provider = NamedReplayProvider { name, replay };
+        assert_eq!(
+            provider.reasoning_replay().stores_context(),
+            expected,
+            "provider {name} with {replay:?} should{} be replayable",
+            if expected { "" } else { " not" }
+        );
+    }
 }
