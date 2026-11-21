@@ -28,8 +28,7 @@ const MAX_OUTPUT_LEN: usize = 30000;
 const DEFAULT_TIMEOUT_MS: u64 = 120000;
 const PROGRESS_MARKER_PREFIX: &str = "JCODE_PROGRESS ";
 const CHECKPOINT_MARKER_PREFIX: &str = "JCODE_CHECKPOINT ";
-const BASH_TOOL_DESCRIPTION: &str =
-    "Run bash. Prefer agentgrep/rg. Include hidden/ignored with --hidden --no-ignore.";
+const BASH_TOOL_DESCRIPTION: &str = "Run a short one-off shell command (git, a build, a single CLI call). For exploring, searching or multi-step work, prefer ipython. Scope searches to a known directory: never `find /` or `find ~`, and keep default ignore rules.";
 const WINDOWS_SHELL_TOOL_DESCRIPTION: &str =
     "Run a Windows cmd.exe command (compatibility name `bash`). Use cmd.exe syntax, not Bash.";
 

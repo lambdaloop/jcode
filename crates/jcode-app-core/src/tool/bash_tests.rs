@@ -28,12 +28,12 @@ mod session_environment;
 
 #[cfg(not(windows))]
 #[test]
-fn bash_definition_prefers_repository_search_tools() {
+fn bash_definition_steers_search_to_scoped_tools() {
     let definition = BashTool::new().to_definition();
     assert_eq!(definition.name, "bash");
-    assert!(definition.description.contains("Prefer agentgrep/rg"));
-    assert!(definition.description.contains("hidden/ignored"));
-    assert!(definition.description.contains("--hidden --no-ignore"));
+    assert!(definition.description.contains("prefer ipython"));
+    assert!(definition.description.contains("never `find /`"));
+    assert!(!definition.description.contains("--no-ignore"));
 }
 
 #[test]

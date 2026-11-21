@@ -47,10 +47,11 @@ pub(crate) const KERNEL_PACKAGES_ENV: &str = "JCODE_IPYTHON_PACKAGES";
 /// Tools kernel code may not call back into.
 const FORBIDDEN_CALLBACK_TOOLS: &[&str] = &["ipython", "batch", "codemode"];
 
-const DESCRIPTION: &str = "Run Python in a persistent IPython kernel for this session. \
-Variables, imports, and state persist across calls. Cells are interrupted after 20s by default \
-(set timeout_seconds for slower cells). Prefer for data work, quick scripts, plotting, and \
-multi-step analysis. Preloaded: show_image(path|fig|PIL|bytes) attaches an image to the result; \
+const DESCRIPTION: &str = "Preferred tool for exploring, searching, running commands and \
+multi-step work. Runs Python in a persistent IPython kernel: variables, imports and state persist \
+across calls, so load once and reuse. Use `%%bash` for shell. Cells are interrupted after 20s by \
+default (set timeout_seconds for slower cells; use bg(...) for long jobs). Search with rg_files / \
+rg_search scoped to a known directory, never `/` or `~`. Preloaded: show_image(path|fig|PIL|bytes) attaches an image to the result; \
 rg_files(glob, path) and rg_search(pattern, path, glob=...) are bounded ripgrep helpers; \
 swarm(action, **kwargs) calls the native swarm tool with its exact schema, e.g. \
 swarm(\"spawn\", label=\"auth-review\", prompt=\"Review auth\") or swarm(\"await_members\", mode=\"all\"); bg(command, name=..., timeout_seconds=...) starts a \
