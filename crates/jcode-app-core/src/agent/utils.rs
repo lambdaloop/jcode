@@ -37,3 +37,29 @@ fn git_output(dir: &Path, args: &[&str]) -> Option<String> {
     }
     Some(String::from_utf8_lossy(&output.stdout).trim().to_string())
 }
+
+/// Drop `[context-ref: mNNNNN]` tags the model echoed into its reply text.
+/// They address transcript messages for folding and are re-added on every
+/// request, so persisting them only leaks them into transcripts and mirrors.
+pub(super) fn strip_echoed_context_refs(blocks: &mut [crate::message::ContentBlock]) {
+    for block in blocks {
+        if let crate::message::ContentBlock::Text { text, .. } = block
+            && let std::borrow::Cow::Owned(clean) = jcode_render_core::strip_context_refs(text)
+        {
+            *text = clean;
+        }
+    }
+}
+
+#[cfg(test)]
+mod context_ref_tests {
+    use crate::message::ContentBlock;
+
+    #[test]
+    fn persisted_assistant_text_has_no_context_ref() {
+        let mut blocks = vec![ContentBlock::Text { text: "Done. [context-ref: m00013]".into(), cache_control: None }];
+        super::strip_echoed_context_refs(&mut blocks);
+        let ContentBlock::Text { text, .. } = &blocks[0] else { panic!() };
+        assert_eq!(text, "Done.");
+    }
+}

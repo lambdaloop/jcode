@@ -1243,6 +1243,7 @@ impl Agent {
             if store_reasoning_content {
                 content_blocks.extend(openai_reasoning_items.iter().cloned());
             }
+            super::utils::strip_echoed_context_refs(&mut content_blocks);
             for tc in &tool_calls {
                 content_blocks.push(tc.to_tool_use_block());
             }

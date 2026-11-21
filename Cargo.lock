@@ -3696,6 +3696,7 @@ dependencies = [
  "jcode-plan",
  "jcode-productivity-core",
  "jcode-provider-core",
+ "jcode-render-core",
  "jcode-schema-dialect",
  "jcode-selfdev-types",
  "jcode-session-types",
