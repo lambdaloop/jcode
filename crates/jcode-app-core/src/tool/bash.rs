@@ -1042,7 +1042,7 @@ impl BashTool {
                         Some(display_name.clone()),
                         &ctx.session_id,
                         params.notify,
-                        params.wake,
+                        params.wake || super::auto_handoff_wake(),
                         work_handle,
                     )
                     .await;

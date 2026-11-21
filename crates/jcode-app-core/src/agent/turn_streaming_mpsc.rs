@@ -1761,7 +1761,7 @@ impl Agent {
                             tool_handoff::handoff_display_name(&tc.input),
                             &self.session.id,
                             true,
-                            false,
+                            automatic_background && crate::tool::auto_handoff_wake(),
                             tool_handle,
                         )
                         .await;

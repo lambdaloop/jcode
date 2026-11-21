@@ -1,5 +1,17 @@
 pub(crate) const BACKGROUND_WAIT_GUIDANCE: &str = "While this task runs, try to make progress on other useful work that does not depend on its result. If nothing independent remains, wait for completion rather than repeatedly polling. Do not duplicate the running task or change inputs it is still using.";
 
+/// Whether an automatic (budget-expired) handoff should wake the session when
+/// the task finishes. External hosts (Polianka) only resume an idle session on
+/// `wake_requested`, so without this the result of any call over the budget is
+/// never seen. Interactive clients keep the notify-only default.
+pub(crate) fn auto_handoff_wake_for(mode: crate::config::WakeMode) -> bool {
+    mode == crate::config::WakeMode::External
+}
+
+pub(crate) fn auto_handoff_wake() -> bool {
+    auto_handoff_wake_for(crate::config::config().server.wake_mode)
+}
+
 mod agentgrep;
 pub mod ambient;
 mod apply_patch;

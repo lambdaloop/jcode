@@ -261,3 +261,10 @@ async fn manual_background_and_shutdown_do_not_wait_for_budget() {
         assert_eq!(start.elapsed(), Duration::ZERO);
     }
 }
+
+#[test]
+fn automatic_handoff_wakes_only_external_hosts() {
+    use crate::config::WakeMode;
+    assert!(crate::tool::auto_handoff_wake_for(WakeMode::External));
+    assert!(!crate::tool::auto_handoff_wake_for(WakeMode::Internal));
+}
