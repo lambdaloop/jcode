@@ -41,6 +41,7 @@ fn session_creation_does_not_wait_for_unreachable_telemetry() {
         .env(CHILD, "1")
         .env("JCODE_HOME", home.path())
         .env_remove("JCODE_NO_TELEMETRY")
+        .env_remove("JCODE_DISABLE_TELEMETRY")
         .env_remove("DO_NOT_TRACK")
         .env("HTTPS_PROXY", &proxy)
         .env("https_proxy", &proxy)

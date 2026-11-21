@@ -20,6 +20,7 @@ struct TestEnvironment {
     previous_home: Option<OsString>,
     previous_no_telemetry: Option<OsString>,
     previous_do_not_track: Option<OsString>,
+    previous_disable_telemetry: Option<OsString>,
     _lock: MutexGuard<'static, ()>,
 }
 
@@ -28,6 +29,10 @@ impl Drop for TestEnvironment {
         restore_env_var("JCODE_HOME", self.previous_home.take());
         restore_env_var("JCODE_NO_TELEMETRY", self.previous_no_telemetry.take());
         restore_env_var("DO_NOT_TRACK", self.previous_do_not_track.take());
+        restore_env_var(
+            "JCODE_DISABLE_TELEMETRY",
+            self.previous_disable_telemetry.take(),
+        );
     }
 }
 
@@ -49,17 +54,31 @@ fn global_test_lock() -> TestEnvironment {
     let previous_home = std::env::var_os("JCODE_HOME");
     let previous_no_telemetry = std::env::var_os("JCODE_NO_TELEMETRY");
     let previous_do_not_track = std::env::var_os("DO_NOT_TRACK");
+    let previous_disable_telemetry = std::env::var_os("JCODE_DISABLE_TELEMETRY");
     jcode_core::env::set_var("JCODE_HOME", home.path());
     jcode_core::env::remove_var("JCODE_NO_TELEMETRY");
     jcode_core::env::remove_var("DO_NOT_TRACK");
+    jcode_core::env::remove_var("JCODE_DISABLE_TELEMETRY");
 
     TestEnvironment {
         _home: home,
         previous_home,
         previous_no_telemetry,
         previous_do_not_track,
+        previous_disable_telemetry,
         _lock: lock,
     }
+}
+
+#[test]
+fn embedder_disable_telemetry_env_opts_out() {
+    let _guard = lock_test_env();
+    assert!(is_enabled());
+    jcode_core::env::set_var("JCODE_DISABLE_TELEMETRY", "1");
+    assert!(!is_enabled());
+    assert_eq!(opt_out_source(), Some(TelemetryOptOutSource::Environment));
+    jcode_core::env::set_var("JCODE_DISABLE_TELEMETRY", "0");
+    assert!(is_enabled());
 }
 
 fn lock_test_env() -> TestEnvironment {

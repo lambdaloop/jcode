@@ -523,7 +523,12 @@ pub fn opt_out_forced_by_env() -> bool {
             )
         })
     }
-    is_truthy("JCODE_NO_TELEMETRY") || is_truthy("DO_NOT_TRACK")
+    // JCODE_DISABLE_TELEMETRY is what embedders (the SDK host, Polianka) set.
+    // Ignoring it made every fresh private home block startup on the
+    // install event's network send before the API socket was bound.
+    is_truthy("JCODE_NO_TELEMETRY")
+        || is_truthy("JCODE_DISABLE_TELEMETRY")
+        || is_truthy("DO_NOT_TRACK")
 }
 
 /// Persist the user's anonymous-usage telemetry choice. `enabled == false`
@@ -615,7 +620,10 @@ pub fn content_sharing_enabled() -> bool {
     if !is_enabled() {
         return false;
     }
-    if std::env::var("JCODE_NO_TELEMETRY").is_ok() || std::env::var("DO_NOT_TRACK").is_ok() {
+    if std::env::var("JCODE_NO_TELEMETRY").is_ok()
+        || std::env::var("JCODE_DISABLE_TELEMETRY").is_ok()
+        || std::env::var("DO_NOT_TRACK").is_ok()
+    {
         return false;
     }
     share_content_marker_path()
