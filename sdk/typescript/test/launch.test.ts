@@ -300,3 +300,28 @@ test(
     fs.rmSync(sandbox, { recursive: true, force: true });
   },
 );
+
+/**
+ * close() polls for the daemon to be gone. The daemon is the bridge's child, so
+ * once it exits it stays a zombie (still answering kill(pid, 0)) until the
+ * bridge reaps it. Treating that as alive made every close() wait out its
+ * 2 s grace period and then SIGKILL, 7 s in all.
+ */
+test("an exited but unreaped process does not count as alive", { skip: process.platform !== "linux" }, async () => {
+  const { spawn } = await import("node:child_process");
+  const { processExistsForTest } = await import("../dist/launch.js");
+  // `sleep 5` never waits for its own child, so the short-lived one becomes a zombie of it.
+  const holder = spawn("sh", ["-c", "sleep 0.05 & echo $!; exec sleep 5"], { stdio: ["ignore", "pipe", "ignore"] });
+  try {
+    const pid = Number(await new Promise<string>((resolve) => holder.stdout!.once("data", (d) => resolve(String(d).trim()))));
+    assert.ok(pid > 1);
+    assert.equal(processExistsForTest(pid), true, "a running process is alive");
+    const deadline = Date.now() + 3000;
+    while (Date.now() < deadline && processExistsForTest(pid)) await new Promise((r) => setTimeout(r, 25));
+    assert.equal(processExistsForTest(pid), false, "a zombie is gone for close() purposes");
+    assert.doesNotThrow(() => process.kill(pid, 0), "still present in the process table, as a zombie");
+  } finally {
+    holder.kill();
+  }
+  assert.equal(processExistsForTest(2 ** 22 + 12345), false, "a pid that does not exist");
+});

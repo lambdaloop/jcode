@@ -1311,7 +1311,8 @@ async fn spawn_server_with_lifetime(
 
     #[cfg(unix)]
     {
-        let _child = server::spawn_server_notify(&mut cmd).await?;
+        let child = server::spawn_server_notify(&mut cmd).await?;
+        reap_server_child(child);
         startup_profile::mark("server_ready");
     }
     #[cfg(not(unix))]
@@ -1361,6 +1362,22 @@ async fn spawn_server_with_lifetime(
 
     #[cfg(unix)]
     Ok(())
+}
+
+/// Reap the spawned daemon when it exits.
+///
+/// Dropping a `Child` never waits for it, so a daemon that exits while this
+/// process lives (an SDK-owned instance asked to stop, a reload that ended)
+/// stays a zombie of this process. A zombie still answers `kill(pid, 0)`, so a
+/// caller polling for the daemon to be gone waits out its whole grace period
+/// and then SIGKILLs a process that already exited (7 s per SDK `close()`).
+#[cfg(unix)]
+fn reap_server_child(mut child: std::process::Child) {
+    let _ = std::thread::Builder::new()
+        .name("server-child-reaper".into())
+        .spawn(move || {
+            let _ = child.wait();
+        });
 }
 
 /// True when the shared server accepts a fresh connection and answers a ping.

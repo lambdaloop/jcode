@@ -402,3 +402,34 @@ auth = "none"
         ProviderChoice::OpenaiCompatible
     ));
 }
+
+/// An exited daemon must not linger as a zombie of this process: a zombie still
+/// answers `kill(pid, 0)`, so an SDK `close()` polling for the daemon to be gone
+/// waited out its whole grace period (7 s) before it gave up and SIGKILLed.
+#[cfg(target_os = "linux")]
+#[test]
+fn reaped_server_child_leaves_no_zombie() {
+    fn is_zombie(pid: u32) -> bool {
+        std::fs::read_to_string(format!("/proc/{pid}/stat"))
+            .ok()
+            .and_then(|stat| stat.rsplit_once(')').map(|(_, rest)| rest.trim_start().starts_with('Z')))
+            .unwrap_or(false)
+    }
+
+    let child = ProcessCommand::new("sleep")
+        .arg("30")
+        .spawn()
+        .expect("spawn stand-in daemon");
+    let pid = child.id();
+    reap_server_child(child);
+    unsafe { libc::kill(pid as i32, libc::SIGTERM) };
+
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    while std::time::Instant::now() < deadline && unsafe { libc::kill(pid as i32, 0) } == 0 {
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    assert!(
+        unsafe { libc::kill(pid as i32, 0) } != 0 && !is_zombie(pid),
+        "daemon pid {pid} stayed in the process table after it exited"
+    );
+}

@@ -450,8 +450,32 @@ function processExists(pid: number): boolean {
   try {
     // Signal 0 tests for existence without touching the process.
     process.kill(pid, 0);
-    return true;
   } catch {
+    return false;
+  }
+  return !isZombie(pid);
+}
+
+/** Exposed so tests can pin the zombie handling without launching a daemon. */
+export function processExistsForTest(pid: number): boolean {
+  return processExists(pid);
+}
+
+/**
+ * True for a process that has exited but is not reaped yet (Linux).
+ *
+ * The daemon is a child of the bridge, not of this process, and `kill(pid, 0)`
+ * succeeds on a zombie until its parent waits for it. Counting a zombie as
+ * alive made `close()` wait out the whole grace period and then SIGKILL a
+ * process that had exited within milliseconds of SIGTERM.
+ */
+function isZombie(pid: number): boolean {
+  try {
+    const stat = fs.readFileSync(`/proc/${pid}/stat`, "utf8");
+    // "pid (comm) S ...": comm may contain spaces and parentheses, so anchor on the last ")".
+    return stat.slice(stat.lastIndexOf(")") + 2, stat.lastIndexOf(")") + 3) === "Z";
+  } catch {
+    // No /proc (macOS, Windows) or the process vanished: the kill probe decides.
     return false;
   }
 }
