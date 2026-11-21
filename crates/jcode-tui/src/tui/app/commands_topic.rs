@@ -3,17 +3,18 @@ use std::path::Path;
 use std::process::Command;
 
 fn topic_slug(input: &str, cwd: &Path) -> Option<String> {
-    let slug = if input.is_empty() {
-        let folder = cwd.file_name()?.to_str()?;
-        folder
-            .split(|c: char| !c.is_ascii_alphanumeric())
-            .filter(|word| !word.is_empty())
-            .collect::<Vec<_>>()
-            .join("-")
-            .to_ascii_lowercase()
+    // A typed name is normalized like the folder name: "My Topic" -> "my-topic".
+    let name = if input.is_empty() {
+        cwd.file_name()?.to_str()?
     } else {
-        input.to_owned()
+        input
     };
+    let slug = name
+        .split(|c: char| !c.is_ascii_alphanumeric())
+        .filter(|word| !word.is_empty())
+        .collect::<Vec<_>>()
+        .join("-")
+        .to_ascii_lowercase();
     (slug.len() <= 40
         && slug
             .as_bytes()
@@ -23,6 +24,10 @@ fn topic_slug(input: &str, cwd: &Path) -> Option<String> {
             .bytes()
             .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == b'-'))
     .then_some(slug)
+}
+
+fn topic_prompt(default: &str) -> String {
+    format!("/topic {default}")
 }
 
 pub(in crate::tui::app) fn handle_topic_command(app: &mut App, input: &str) -> bool {
@@ -42,11 +47,26 @@ pub(in crate::tui::app) fn handle_topic_command(app: &mut App, input: &str) -> b
         .as_deref()
         .map(|path| Ok(std::path::PathBuf::from(path)))
         .unwrap_or_else(std::env::current_dir);
+    let arg = words.next().unwrap_or_default().trim().to_owned();
+    if arg.is_empty() {
+        // Prompt for the name: pre-fill the input with the folder-derived default.
+        let default = cwd
+            .as_deref()
+            .ok()
+            .and_then(|cwd| topic_slug("", cwd))
+            .unwrap_or_default();
+        app.input = topic_prompt(&default);
+        app.cursor_pos = app.input.len();
+        app.push_display_message(DisplayMessage::system(
+            "Name the topic: edit the name after /topic and press Enter.".to_owned(),
+        ));
+        return true;
+    }
     let result = (|| -> Result<(), String> {
         let cwd = cwd.map_err(|err| format!("Could not determine the topic folder: {err}"))?;
         // The launcher creates .pi/hub.json from the paired hub when missing.
-        let slug = topic_slug(words.next().unwrap_or_default().trim(), &cwd).ok_or_else(|| {
-            "Usage: /topic [slug]. Use 1 to 40 lowercase letters, digits, or dashes, starting with a letter or digit.".to_owned()
+        let slug = topic_slug(&arg, &cwd).ok_or_else(|| {
+            "Usage: /topic [name]. The name needs letters or digits and becomes a slug of at most 40 characters.".to_owned()
         })?;
         let launcher = std::env::var_os("POLIANKA_JCODE_LAUNCHER");
         if launcher
@@ -88,7 +108,13 @@ mod tests {
         let cwd = Path::new("/project/My Topic_02");
         assert_eq!(topic_slug("", cwd).as_deref(), Some("my-topic-02"));
         assert_eq!(topic_slug("existing-1", cwd).as_deref(), Some("existing-1"));
-        for bad in ["-flag", "Foo", "two args", "../outside", &"x".repeat(41)] {
+        assert_eq!(topic_slug("my name", cwd).as_deref(), Some("my-name"));
+        assert_eq!(topic_slug("  Two  Args ", cwd).as_deref(), Some("two-args"));
+        assert_eq!(topic_slug("../outside", cwd).as_deref(), Some("outside"));
+        assert_eq!(topic_slug("-flag", cwd).as_deref(), Some("flag"));
+        assert_eq!(topic_prompt("my-topic-02"), "/topic my-topic-02");
+        assert_eq!(topic_prompt(""), "/topic ");
+        for bad in ["---", "./", "\u{e9}", &"x".repeat(41)] {
             assert_eq!(topic_slug(bad, cwd), None);
         }
     }
