@@ -443,6 +443,9 @@ pub fn format_content_blocks_with_native(
                     });
                 }
             }
+            // Anthropic 400s on empty text blocks; histories saved earlier can hold
+            // one (for example a reply that was only a stripped context-ref tag).
+            ContentBlock::Text { text, .. } if text.trim().is_empty() => {}
             ContentBlock::Text { text, .. } => {
                 // A text block that immediately follows an image-bearing tool_result is the
                 // "[Attached image associated with the preceding tool result: ...]" label
@@ -926,6 +929,20 @@ mod cache_prefix_invariant_tests {
             timestamp: None,
             tool_duration_ms: None,
         }
+    }
+
+    #[test]
+    fn empty_text_blocks_are_never_sent() {
+        let messages = vec![
+            text_msg(Role::User, "hi"),
+            text_msg(Role::Assistant, ""),
+            text_msg(Role::Assistant, "  \n"),
+            text_msg(Role::User, "again"),
+        ];
+        let out = format_messages(&messages, false);
+        let json = serde_json::to_string(&out).unwrap();
+        assert!(!json.contains(r#""text":"""#) && !json.contains(r#""text":"  "#), "{json}");
+        assert!(out.iter().all(|m| !m.content.is_empty()));
     }
 
     /// A realistic warm conversation: user/assistant turns ending on a user message.
